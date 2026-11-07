@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ order.order_number }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('orders.index') }}">&larr; Orders</a></p>
+<div class="card">
+  <h1>{{ order.order_number }} <span class="status status-{{ order.status }}">{{ order.status|capitalize }}</span></h1>
+  <dl class="details">
+    <dt>Customer</dt><dd>{{ order.customer.name }}</dd>
+    <dt>Date</dt><dd>{{ order.order_date }}</dd>
+    <dt>Created by</dt><dd>{{ order.creator.name }}</dd>
+  </dl>
+
+  <table>
+    <thead>
+      <tr><th>Product</th><th class="number">Quantity</th><th class="number">Rate</th><th class="number">Amount</th></tr>
+    </thead>
+    <tbody>
+      {% for item in order.items %}
+      <tr>
+        <td>{{ item.product.code }} · {{ item.product.name }}</td>
+        <td class="number">{{ item.quantity }}</td>
+        <td class="number">{{ item.rate }}</td>
+        <td class="number">{{ item.amount }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr><td colspan="3" class="number">Subtotal</td><td class="number">{{ order.subtotal }}</td></tr>
+      <tr><td colspan="3" class="number">Discount ({{ order.discount_percent }}%)</td><td class="number">{{ order.discount_amount }}</td></tr>
+      <tr class="total-row"><td colspan="3" class="number">Grand total</td><td class="number">{{ order.grand_total }}</td></tr>
+    </tfoot>
+  </table>
+
+  <div id="action-message" class="message message-error" hidden></div>
+
+  <div class="actions">
+    {% if can_edit %}
+    <a class="button" href="{{ url_for('orders.edit', order_id=order.id) }}">Edit draft</a>
+    {% endif %}
+    {% if can_confirm %}
+    <button type="button" class="button" data-order-action
+            data-url="/api/orders/{{ order.id }}/confirm"
+            data-confirm="Confirm order {{ order.order_number }}? Stock will be taken for every item.">Confirm order</button>
+    {% endif %}
+    {% if can_cancel %}
+    <button type="button" class="button button-danger" data-order-action
+            data-url="/api/orders/{{ order.id }}/cancel"
+            data-confirm="Cancel order {{ order.order_number }}?{% if order.status == 'confirmed' %} Its stock will be put back.{% endif %} This cannot be undone.">Cancel order</button>
+    {% endif %}
+  </div>
+  {% if not can_edit %}
+  <p class="muted">This order is {{ order.status }}, so it is read-only.</p>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/order_form.js') }}"></script>
+{% endblock %}

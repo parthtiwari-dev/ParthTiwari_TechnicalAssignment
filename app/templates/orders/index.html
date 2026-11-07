@@ -1,6 +1,48 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block title %}Orders{% endblock %}
 {% block content %}
-<h1>Orders</h1>
-<p class="muted">Coming soon.</p>
+<div class="page-head">
+  <h1>{{ 'Orders' if current_user.is_admin else 'My orders' }}</h1>
+  <a class="button" href="{{ url_for('orders.create') }}">New order</a>
+</div>
+
+<form method="get" class="filters">
+  <div>
+    <label for="status">Status</label>
+    <select id="status" name="status">
+      <option value="">All</option>
+      {% for value in ['draft', 'confirmed', 'cancelled'] %}
+      <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ value|capitalize }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="button">Filter</button>
+</form>
+
+{% if orders %}
+<table>
+  <thead>
+    <tr>
+      <th>Order</th><th>Date</th><th>Customer</th><th>Status</th><th class="number">Grand total</th>
+      {% if current_user.is_admin %}<th>Created by</th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for order in orders %}
+    <tr>
+      <td><a href="{{ url_for('orders.view', order_id=order.id) }}">{{ order.order_number }}</a></td>
+      <td>{{ order.order_date }}</td>
+      <td>{{ order.customer.name }}</td>
+      <td><span class="status status-{{ order.status }}">{{ order.status|capitalize }}</span></td>
+      <td class="number">{{ order.grand_total }}</td>
+      {% if current_user.is_admin %}<td>{{ order.creator.name }}</td>{% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{{ ui.pagination('orders.index', page, per_page, total) }}
+{% else %}
+<p class="muted">No orders yet.</p>
+{% endif %}
 {% endblock %}
