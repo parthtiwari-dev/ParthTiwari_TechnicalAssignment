@@ -52,13 +52,9 @@ def test_pages_require_login(client):
     assert "/login" in response.headers["Location"]
 
 
-def test_api_requires_login_with_json_401(app):
-    # The API routes are added later; this checks the shared "not logged in" answer for /api/.
-    from app.extensions import login_manager
-
-    with app.test_request_context("/api/orders/1"):
-        response, status = login_manager.unauthorized()
-    assert status == 401
+def test_api_requires_login_with_json_401(client):
+    response = client.get("/api/products")
+    assert response.status_code == 401
     assert response.get_json() == {"error": "Please log in first.", "details": {}}
 
 
