@@ -37,7 +37,7 @@
       <td>{{ movement.product.code }} — {{ movement.product.name }}</td>
       <td>{{ movement.movement_type|capitalize }}</td>
       <td class="number">{{ "%+d"|format(movement.quantity_change) }}</td>
-      <td>{% if movement.order %}{{ movement.order.order_number }}{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>{% if movement.order %}<a href="{{ url_for('orders.view', order_id=movement.order.id) }}">{{ movement.order.order_number }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
       <td>{{ movement.reason }}</td>
       <td>{{ movement.creator.name }}</td>
     </tr>
