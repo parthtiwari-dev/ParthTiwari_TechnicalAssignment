@@ -146,11 +146,23 @@ def test_new_product_with_zero_stock_has_no_movement_and_can_be_deleted(client, 
 def test_duplicate_product_code_rejected(client, login, admin_user, make_product):
     make_product(code="DUP-001")
     login(client, admin_user)
-    # MySQL compares codes ignoring case, so "dup-001" is the same code.
+    # products.code ignores case, so "dup-001" is the same code.
     response = client.post("/products/new", data=_product_form(code="dup-001"))
     assert response.status_code == 422
     assert b"Code dup-001 is already used by another product." in response.data
     assert db.session.scalar(select(Product.id).where(Product.name == "Webcam")) is None
+
+
+def test_product_codes_ignore_case_but_not_accents(client, login, admin_user, make_product):
+    make_product(code="CAFE-1")
+    login(client, admin_user)
+
+    response = client.post("/products/new", data=_product_form(code="CAFÉ-1"))
+    assert response.status_code == 302
+
+    response = client.post("/products/new", data=_product_form(code="café-1"))
+    assert response.status_code == 422
+    assert "Code café-1 is already used by another product.".encode() in response.data
 
 
 def test_editing_product_to_another_products_code_rejected(client, login, admin_user, make_product):

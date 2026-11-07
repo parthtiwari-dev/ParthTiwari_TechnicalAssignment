@@ -219,7 +219,11 @@ def _clean_product(data, product_id=None, with_stock=False):
 
 
 def _code_taken(code, product_id=None):
-    """True if another product already has this code. MySQL compares it ignoring case."""
+    """True if another product already has this code.
+
+    MySQL compares it with the column's collation: case is ignored, accents count
+    (PRD-1 = prd-1, but CAFE-1 and CAFÉ-1 are different codes).
+    """
     query = select(Product.id).where(Product.code == code)
     if product_id is not None:
         query = query.where(Product.id != product_id)

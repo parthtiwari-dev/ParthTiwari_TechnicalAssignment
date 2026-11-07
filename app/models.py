@@ -8,6 +8,10 @@ Rules the database itself enforces (so bad data can't get in even if app code ha
   that an order or stock movement still points to
 
 Money columns are DECIMAL(12,2). Python reads them as Decimal, never float.
+
+Text is compared the MySQL 8 default way (utf8mb4_0900_ai_ci: case and accents ignored),
+except products.code, which uses utf8mb4_0900_as_ci: case is ignored but accents count.
+So PRD-1 and prd-1 are the same code, while CAFE-1 and CAFÉ-1 are two different codes.
 """
 from flask_login import UserMixin
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -27,6 +31,9 @@ MOVEMENT_SALE = "sale"
 MOVEMENT_CANCELLATION = "cancellation"
 
 MONEY = db.Numeric(12, 2)
+# Case-insensitive, accent-sensitive. Python's str.lower() gives the same answer for normal
+# codes, so the product form, the CSV import and the unique index all agree.
+CODE_COLLATION = "utf8mb4_0900_as_ci"
 
 
 class User(UserMixin, db.Model):
@@ -70,7 +77,7 @@ class Product(db.Model):
     __tablename__ = "products"
 
     id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String(50), nullable=False, unique=True)
+    code = db.Column(db.String(50, collation=CODE_COLLATION), nullable=False, unique=True)
     name = db.Column(db.String(150), nullable=False, index=True)
     category = db.Column(db.String(100), nullable=False, index=True)
     price = db.Column(MONEY, nullable=False)

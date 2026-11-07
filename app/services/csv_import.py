@@ -13,7 +13,7 @@ Blank lines are skipped but still counted, so the numbers match what a text edit
 import csv
 import io
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.errors import ConflictError, ForbiddenError, ValidationError
@@ -145,7 +145,8 @@ def validate_rows(rows):
             else:
                 add_error(row_number, "status", "Status must be Active or Inactive.")
 
-        # Codes are compared ignoring case, as MySQL does: PRD-001 and prd-001 are the same code.
+        # Codes are compared ignoring case but not accents, as the products.code column does
+        # (utf8mb4_0900_as_ci): PRD-001 and prd-001 are the same code, CAFE-1 and CAFÉ-1 are not.
         code_key = clean["code"].lower()
         if code_key:
             if code_key in first_seen:
@@ -156,17 +157,33 @@ def validate_rows(rows):
                 first_seen[code_key] = clean
         products.append(clean)
 
-    # One query for all the codes, to find the ones already in the database.
+    # One query for all the codes, to find the ones already in the database. MySQL does the
+    # comparing, with the column's own rules, so this agrees with the unique index.
     if first_seen:
-        existing = db.session.scalars(
-            select(func.lower(Product.code)).where(func.lower(Product.code).in_(list(first_seen)))
-        ).all()
-        for code_key in existing:
-            row = first_seen[code_key]
-            add_error(row["row"], "product_code", f"Product code {row['code']} already exists.")
+        file_codes = [row["code"] for row in first_seen.values()]
+        existing = db.session.scalars(select(Product.code).where(Product.code.in_(file_codes))).all()
+        for existing_code in existing:
+            row = first_seen.get(existing_code.lower())
+            if row is None:
+                # MySQL matched a code that lower() sees as different (rare, e.g. "ß" and "ss").
+                # Ask MySQL which file row it was.
+                row = _row_matching_code(first_seen.values(), existing_code)
+            if row is not None:
+                add_error(row["row"], "product_code", f"Product code {row['code']} already exists.")
 
     errors.sort(key=lambda error: error["row"])  # stable: keeps column order within a row
     return products, errors
+
+
+def _row_matching_code(rows, existing_code):
+    """The first row whose code MySQL counts as equal to existing_code, or None."""
+    for row in rows:
+        same = db.session.scalar(
+            select(Product.id).where(Product.code == row["code"], Product.code == existing_code).limit(1)
+        )
+        if same is not None:
+            return row
+    return None
 
 
 def import_products(data, user):
@@ -199,11 +216,13 @@ def import_products(data, user):
                              reason="Opening stock (CSV import)")
         db.session.commit()  # one commit: all products and movements, or none
     except IntegrityError:
-        # Someone added one of these codes between our check and our save. The unique key on
-        # products.code stopped it, and the rollback undoes every row from this file.
+        # The unique key on products.code refused a code, and the rollback undoes every row
+        # from this file. Usually someone added one of these codes between our check and our
+        # save. Rarely, the file has two codes MySQL counts as the same but lower() doesn't.
         db.session.rollback()
-        raise ConflictError("A product code in the file was added by someone else just now. "
-                            "Upload the file again to see which one.")
+        raise ConflictError("A product code in the file clashed with another code when saving, "
+                            "so nothing was imported. Someone may have added it just now: "
+                            "upload the file again to see which one.")
     except Exception:
         db.session.rollback()
         raise

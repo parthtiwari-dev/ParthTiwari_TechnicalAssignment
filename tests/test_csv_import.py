@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import func, select
 
-from app.errors import ForbiddenError, ValidationError
+from app.errors import ConflictError, ForbiddenError, ValidationError
 from app.extensions import db
 from app.models import MOVEMENT_OPENING, Product, StockMovement
 from app.services.csv_import import MAX_FILE_BYTES, import_products
@@ -118,6 +118,65 @@ def test_code_already_in_database_is_rejected_ignoring_case(admin_user, make_pro
     assert imported == 0
     assert messages(errors) == [(3, "Product code acc-001 already exists.")]
     assert product_count() == 1  # only the one made above
+
+
+def test_accented_code_is_a_different_code_from_the_plain_one(admin_user, make_product):
+    # products.code ignores case but not accents (utf8mb4_0900_as_ci), so CAFÉ-1 is new.
+    # Before, MySQL said it matched CAFE-1 and Python said it didn't, and the import crashed.
+    make_product(code="CAFE-1")
+    data = csv_bytes("CAFÉ-1,Coffee,Food,100,5,Active")
+
+    imported, errors = import_products(data, admin_user)
+
+    assert (imported, errors) == (1, [])
+    codes = db.session.scalars(select(Product.code).order_by(Product.code)).all()
+    assert codes == ["CAFE-1", "CAFÉ-1"]
+
+
+def test_accented_and_plain_codes_in_one_file_both_import(admin_user):
+    data = csv_bytes(
+        "CAFE-2,Coffee,Food,100,5,Active",
+        "CAFÉ-2,Coffee with an accent,Food,100,5,Active",
+        "cafe-3,Tea,Food,50,5,Active",
+    )
+
+    imported, errors = import_products(data, admin_user)
+
+    assert (imported, errors) == (3, [])
+
+
+def test_accented_codes_still_match_ignoring_case(admin_user, make_product):
+    make_product(code="CAFÉ-4")
+    data = csv_bytes("café-4,Coffee,Food,100,5,Active")
+
+    imported, errors = import_products(data, admin_user)
+
+    assert imported == 0
+    assert messages(errors) == [(2, "Product code café-4 already exists.")]
+
+
+def test_code_mysql_matches_but_lower_does_not_is_still_reported(admin_user, make_product):
+    # MySQL counts a fullwidth Ａ as the same letter as A; Python's lower() doesn't.
+    # The row is still found and reported, instead of a crash.
+    make_product(code="A-5")
+    data = csv_bytes("Ａ-5,Fullwidth,Food,100,5,Active")
+
+    imported, errors = import_products(data, admin_user)
+
+    assert imported == 0
+    assert messages(errors) == [(2, "Product code Ａ-5 already exists.")]
+
+
+def test_two_codes_mysql_counts_as_the_same_in_one_file_import_nothing(admin_user):
+    data = csv_bytes(
+        "A-6,Plain,Food,100,5,Active",
+        "Ａ-6,Fullwidth,Food,100,5,Active",
+    )
+
+    with pytest.raises(ConflictError):
+        import_products(data, admin_user)
+    assert product_count() == 0
+    assert movement_count() == 0
 
 
 @pytest.mark.parametrize("header, message", [
