@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Stock movement history{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('reports.index') }}">&larr; Reports</a></p>
+<h1>Stock movement history</h1>
+<p class="muted">Every change to stock, newest first. A positive change adds stock, a negative one removes it.</p>
+<form method="get" class="filters">
+  <div>
+    <label for="product_id">Product</label>
+    <select id="product_id" name="product_id">
+      <option value="">All products</option>
+      {% for product in products %}
+      <option value="{{ product.id }}" {% if product.id == product_id %}selected{% endif %}>
+        {{ product.code }} — {{ product.name }}{% if not product.is_active %} (inactive){% endif %}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit">Show</button>
+</form>
+<table>
+  <thead>
+    <tr>
+      <th>When</th>
+      <th>Product</th>
+      <th>Type</th>
+      <th class="number">Change</th>
+      <th>Order</th>
+      <th>Reason</th>
+      <th>By</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for movement in movements %}
+    <tr>
+      <td>{{ movement.created_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+      <td>{{ movement.product.code }} — {{ movement.product.name }}</td>
+      <td>{{ movement.movement_type|capitalize }}</td>
+      <td class="number">{{ "%+d"|format(movement.quantity_change) }}</td>
+      <td>{% if movement.order %}{{ movement.order.order_number }}{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>{{ movement.reason }}</td>
+      <td>{{ movement.creator.name }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">No stock movements.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="pagination">
+  {% if page > 1 %}<a href="{{ url_for('reports.stock_movements', product_id=product_id, page=page - 1) }}">&larr; Newer</a>{% endif %}
+  <span class="muted">Page {{ page }} of {{ last_page }} · {{ total }} movements</span>
+  {% if page < last_page %}<a href="{{ url_for('reports.stock_movements', product_id=product_id, page=page + 1) }}">Older &rarr;</a>{% endif %}
+</p>
+{% endblock %}

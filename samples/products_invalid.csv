@@ -1,0 +1,9 @@
+product_code,product_name,category,price,stock_quantity,status
+PRD-101,Wireless Keyboard,Accessories,1800,10,Active
+PRD-102,Mouse Pad,Accessories,-150,30,Active
+PRD-103,HDMI Cable,Accessories,299,ten,Active
+PRD-104,Desk Lamp,Accessories,899,12,Available
+PRD-101,Wireless Keyboard Copy,Accessories,1800,10,Active
+PRD-105,,Accessories,450,8,Active
+ACC-001,Keyboard,Accessories,1500,5,Active
+PRD-106,Monitor Cleaning Kit,Accessories,349,25,Inactive

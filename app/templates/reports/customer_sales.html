@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Customer sales summary{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('reports.index') }}">&larr; Reports</a></p>
+<h1>Customer sales summary</h1>
+<p class="muted">Confirmed orders only. Every customer is listed, including those with no sales.</p>
+{% include "reports/_date_filter.html" %}
+{% if not error %}
+<table>
+  <thead>
+    <tr>
+      <th>Customer</th>
+      <th class="number">Confirmed orders</th>
+      <th class="number">Total sales (after discount)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row.name }}{% if not row.is_active %} <span class="muted">(inactive)</span>{% endif %}</td>
+      <td class="number">{{ row.order_count }}</td>
+      <td class="number">{{ "%.2f"|format(row.total_sales) }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="3" class="muted">No customers yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

@@ -2,5 +2,15 @@
 {% block title %}Reports{% endblock %}
 {% block content %}
 <h1>Reports</h1>
-<p class="muted">Coming soon.</p>
+<p class="muted">Sales reports count confirmed orders only. Draft and cancelled orders are left out.</p>
+<ul class="report-list">
+  <li><a href="{{ url_for('reports.customer_sales') }}">Customer sales summary</a>
+    <span class="muted">— confirmed orders and sales after discount, per customer</span></li>
+  <li><a href="{{ url_for('reports.product_sales') }}">Product sales summary</a>
+    <span class="muted">— quantity sold and value before order discount, per product</span></li>
+  <li><a href="{{ url_for('reports.low_stock') }}">Low stock</a>
+    <span class="muted">— active products below a stock level you choose</span></li>
+  <li><a href="{{ url_for('reports.stock_movements') }}">Stock movement history</a>
+    <span class="muted">— every stock change, newest first</span></li>
+</ul>
 {% endblock %}

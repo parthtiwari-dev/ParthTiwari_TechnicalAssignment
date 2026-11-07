@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Product sales summary{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('reports.index') }}">&larr; Reports</a></p>
+<h1>Product sales summary</h1>
+<p class="muted">Confirmed orders only. Gross value is quantity &times; rate, before the order discount.
+  Only products sold in the range are listed.</p>
+{% include "reports/_date_filter.html" %}
+{% if not error %}
+<table>
+  <thead>
+    <tr>
+      <th>Code</th>
+      <th>Product</th>
+      <th class="number">Quantity sold</th>
+      <th class="number">Gross value (before discount)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row.code }}</td>
+      <td>{{ row.name }}</td>
+      <td class="number">{{ row.quantity_sold }}</td>
+      <td class="number">{{ "%.2f"|format(row.gross_value) }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">No confirmed sales in this range.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
