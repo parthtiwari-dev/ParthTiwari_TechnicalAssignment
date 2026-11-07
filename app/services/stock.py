@@ -11,9 +11,10 @@ from sqlalchemy import select
 from app.errors import ForbiddenError, NotFoundError, ValidationError
 from app.extensions import db
 from app.models import MOVEMENT_ADJUSTMENT, Product, StockMovement
-from app.services.pricing import parse_int
+from app.services.pricing import MAX_QUANTITY, parse_int
 
 MAX_REASON_LENGTH = 255
+MAX_STOCK_IN_DATABASE = 2_147_483_647  # the largest value a MySQL INT column can hold
 
 
 def change_stock(product, quantity_change, movement_type, user, reason, order=None):
@@ -25,9 +26,13 @@ def change_stock(product, quantity_change, movement_type, user, reason, order=No
     product row (lock_products below). For a brand new product no lock is needed.
     """
     new_quantity = product.stock_quantity + quantity_change
+    # Callers check first and give friendlier messages. These are the last safety nets.
     if new_quantity < 0:
-        # Callers check first and give a friendlier message. This is the last safety net.
         raise ValidationError(f"Stock for {product.code} can't go below zero.")
+    if new_quantity > MAX_STOCK_IN_DATABASE:
+        # The database limit, not MAX_QUANTITY: cancelling an order must always be able to
+        # give its stock back, even if that takes stock a little above MAX_QUANTITY.
+        raise ValidationError(f"Stock for {product.code} would be too large.")
     product.stock_quantity = new_quantity
     movement = StockMovement(
         product=product,
@@ -62,8 +67,9 @@ def lock_products(product_ids):
 def adjust_stock(product_id, quantity_change, reason, user):
     """Admin action: raise or lower a product's stock by hand, with a reason.
 
-    One transaction: lock the product, check the result stays at zero or above, change the
-    stock, write an 'adjustment' movement, commit. Returns the product.
+    One transaction: lock the product, check the result stays between zero and MAX_QUANTITY
+    (the same cap as opening stock), change the stock, write an 'adjustment' movement, commit.
+    Returns the product.
     """
     try:
         if not user.is_admin:
@@ -91,6 +97,15 @@ def adjust_stock(product_id, quantity_change, reason, user):
             raise ValidationError(
                 f"Stock can't go below zero. {product.code} has {product.stock_quantity} in stock.",
                 {"quantity_change": f"Can't remove more than {product.stock_quantity}."},
+            )
+        # Only an increase is capped. Lowering stock is always allowed, even if a cancelled
+        # order has left it above the cap.
+        if quantity_change > 0 and product.stock_quantity + quantity_change > MAX_QUANTITY:
+            room = max(MAX_QUANTITY - product.stock_quantity, 0)
+            raise ValidationError(
+                f"Stock can't be more than {MAX_QUANTITY}. "
+                f"{product.code} has {product.stock_quantity} in stock.",
+                {"quantity_change": f"Can't add more than {room}."},
             )
 
         change_stock(product, quantity_change, MOVEMENT_ADJUSTMENT, user, reason)
