@@ -1,4 +1,6 @@
 """Login, logout, and the login requirement on pages and the API."""
+import pytest
+
 from tests.conftest import PASSWORD
 
 
@@ -58,11 +60,29 @@ def test_login_redirects_back_to_next_page(client, sales_user):
     assert response.headers["Location"] == "/customers/"
 
 
-def test_login_ignores_offsite_next(client, sales_user):
+@pytest.mark.parametrize("next_url", [
+    "//evil.example",
+    "/\t/evil.example",      # browsers drop the tab and read //evil.example
+    "/\n/evil.example",
+    "/\\evil.example",       # browsers read the backslash as a slash
+    "https://evil.example",
+])
+def test_login_ignores_offsite_next(client, sales_user, next_url):
     response = client.post(
-        "/login?next=//evil.example", data={"email": sales_user.email, "password": PASSWORD}
+        "/login",
+        query_string={"next": next_url},
+        data={"email": sales_user.email, "password": PASSWORD},
     )
     assert response.headers["Location"] == "/"
+
+
+def test_login_follows_a_next_path_on_this_site(client, sales_user):
+    response = client.post(
+        "/login",
+        query_string={"next": "/orders/"},
+        data={"email": sales_user.email, "password": PASSWORD},
+    )
+    assert response.headers["Location"] == "/orders/"
 
 
 def test_sales_user_cannot_open_admin_pages(client, login, sales_user):

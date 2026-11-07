@@ -1,4 +1,6 @@
 """Login and logout."""
+from urllib.parse import urlsplit
+
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_user, logout_user
 from sqlalchemy import select
@@ -10,10 +12,21 @@ auth_bp = Blueprint("auth", __name__)
 
 
 def safe_next_url(target):
-    """Only follow ?next= if it is a path on this site, so a link can't send users elsewhere."""
-    if target and target.startswith("/") and not target.startswith("//"):
-        return target
-    return url_for("home")
+    """Only follow ?next= if it is a path on this site, so a link can't send users elsewhere.
+
+    Browsers are forgiving: they drop tabs and newlines inside a URL and read a backslash as a
+    slash. So "/<tab>/evil.example" or "/<backslash>evil.example" would really go to
+    evil.example. Any backslash or control character is refused, and what is left must have
+    no scheme ("https:") and no host ("//evil.example").
+    """
+    if not target or not target.startswith("/"):
+        return url_for("home")
+    if "\\" in target or any(ord(char) < 32 or ord(char) == 127 for char in target):
+        return url_for("home")
+    parts = urlsplit(target)
+    if parts.scheme or parts.netloc:
+        return url_for("home")
+    return target
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
