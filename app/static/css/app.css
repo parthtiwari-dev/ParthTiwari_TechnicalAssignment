@@ -132,3 +132,4 @@ td.number, th.number { text-align: right; font-variant-numeric: tabular-nums; }
 /* Reports and import */
 .report-list li { margin-bottom: 0.5rem; }
 .pagination { display: flex; gap: 1rem; align-items: center; margin-top: 1rem; }
+.csv-header { background: #eef2f6; padding: 0.5rem 0.75rem; border-radius: 4px; overflow-x: auto; }

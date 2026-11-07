@@ -2,5 +2,46 @@
 {% block title %}Import products{% endblock %}
 {% block content %}
 <h1>Import products</h1>
-<p class="muted">Coming soon.</p>
+
+<div class="card">
+  <p>Upload a CSV file (UTF-8, up to 1 MB). The first row must be exactly this header:</p>
+  <pre class="csv-header">{{ columns|join(",") }}</pre>
+  <ul class="muted">
+    <li>Every row is checked first. If any row has a problem, <strong>nothing is imported</strong>.</li>
+    <li>Product codes must be new: not repeated in the file, and not already in the system (capital letters don't matter).</li>
+    <li>Price: a number, zero or more, up to 2 decimal places. Stock quantity: a whole number, zero or more.</li>
+    <li>Status: Active or Inactive.</li>
+    <li>Opening stock is recorded as a stock movement for each product.</li>
+  </ul>
+  <form method="post" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="file">CSV file</label>
+    <input type="file" id="file" name="file" accept=".csv,text/csv" required>
+    <button type="submit">Import</button>
+  </form>
+</div>
+
+{% if error %}
+<div class="message message-error">{{ error }} Nothing was imported.</div>
+{% endif %}
+
+{% if row_errors %}
+<h2>{{ filename }}: {{ row_errors|length }} problem{{ "s" if row_errors|length != 1 }} found. Nothing was imported.</h2>
+<p class="muted">Row numbers match the lines in the file: the header is row 1, the first product is row 2.
+  Fix every row below and upload the file again.</p>
+<table>
+  <thead>
+    <tr><th class="number">Row</th><th>Column</th><th>Problem</th></tr>
+  </thead>
+  <tbody>
+    {% for row_error in row_errors %}
+    <tr>
+      <td class="number">{{ row_error.row }}</td>
+      <td>{{ row_error.column or "—" }}</td>
+      <td>{{ row_error.message }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
 {% endblock %}
