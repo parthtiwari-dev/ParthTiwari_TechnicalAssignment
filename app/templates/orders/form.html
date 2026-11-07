@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit ' ~ order.order_number if order else 'New order' }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('orders.view', order_id=order.id) if order else url_for('orders.index') }}">&larr; Back</a></p>
+<div class="card">
+  <h1>{{ 'Edit draft ' ~ order.order_number if order else 'New order' }}</h1>
+
+  {# order_form.js runs this form: it saves through the JSON API and shows its errors here. #}
+  <form id="order-form" data-order-id="{{ order.id if order else '' }}" novalidate>
+    <div id="form-message" class="message message-error" hidden></div>
+
+    <label for="customer_id">Customer *</label>
+    <select id="customer_id" name="customer_id">
+      <option value="">Choose a customer</option>
+      {% for customer in customers %}
+      <option value="{{ customer.id }}" {% if order and order.customer_id == customer.id %}selected{% endif %}>
+        {{ customer.name }}{% if not customer.is_active %} (inactive){% endif %}
+      </option>
+      {% endfor %}
+    </select>
+    <div class="field-error" data-error-for="customer_id"></div>
+
+    <h2>Items</h2>
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th>Product *</th><th class="number">Rate</th><th class="number">In stock</th>
+          <th>Quantity *</th><th class="number">Amount</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="item-rows"></tbody>
+    </table>
+    <div class="field-error" data-error-for="items"></div>
+    <button type="button" id="add-row" class="button button-secondary">Add item</button>
+
+    <label for="discount_percent">Discount % (0 to 20)</label>
+    <input id="discount_percent" name="discount_percent" class="short-input" inputmode="decimal"
+           value="{{ order.discount_percent if order else '0' }}">
+    <div class="field-error" data-error-for="discount_percent"></div>
+
+    <table class="totals">
+      <tr><td>Subtotal</td><td class="number" id="subtotal">0.00</td></tr>
+      <tr><td>Discount</td><td class="number" id="discount-amount">0.00</td></tr>
+      <tr class="total-row"><td>Grand total</td><td class="number" id="grand-total">0.00</td></tr>
+    </table>
+    <p class="muted">These totals are a preview. The server works out the final amounts when you save.</p>
+
+    <button type="submit" id="save-button" class="button">Save draft</button>
+  </form>
+</div>
+
+{# One item row. order_form.js copies it for every "Add item". #}
+<template id="item-row-template">
+  <tr class="item-row">
+    <td>
+      <select class="product-select">
+        <option value="">Choose a product</option>
+        {% for product in products %}
+        <option value="{{ product.id }}">{{ product.code }} · {{ product.name }}{% if not product.is_active %} (inactive){% endif %}</option>
+        {% endfor %}
+      </select>
+      <div class="field-error product-error"></div>
+    </td>
+    <td class="number rate-cell">-</td>
+    <td class="number stock-cell">-</td>
+    <td>
+      <input class="quantity-input short-input" type="number" min="1" step="1" value="1">
+      <div class="field-error quantity-error"></div>
+    </td>
+    <td class="number amount-cell">0.00</td>
+    <td><button type="button" class="button-link remove-row">Remove</button></td>
+  </tr>
+</template>
+
+{# The order being edited, as the API returns it. Empty for a new order. #}
+<script type="application/json" id="order-data">{{ order_data|tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/order_form.js') }}"></script>
+{% endblock %}

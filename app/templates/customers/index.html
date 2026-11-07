@@ -1,6 +1,51 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block title %}Customers{% endblock %}
 {% block content %}
-<h1>Customers</h1>
-<p class="muted">Coming soon.</p>
+<div class="page-head">
+  <h1>Customers</h1>
+  {% if current_user.is_admin %}
+  <a class="button" href="{{ url_for('customers.create') }}">New customer</a>
+  {% endif %}
+</div>
+
+<form method="get" class="filters">
+  <div>
+    <label for="q">Search</label>
+    <input id="q" name="q" value="{{ q }}" placeholder="Name, email or mobile">
+  </div>
+  {% if current_user.is_admin %}
+  <div>
+    <label for="status">Status</label>
+    <select id="status" name="status">
+      <option value="active" {% if status == 'active' %}selected{% endif %}>Active</option>
+      <option value="inactive" {% if status == 'inactive' %}selected{% endif %}>Inactive</option>
+      <option value="all" {% if status == 'all' %}selected{% endif %}>All</option>
+    </select>
+  </div>
+  {% endif %}
+  <button type="submit" class="button">Search</button>
+</form>
+
+{% if customers %}
+<table>
+  <thead>
+    <tr><th>Name</th><th>Email</th><th>Mobile</th><th>City</th>{% if current_user.is_admin %}<th>Status</th>{% endif %}</tr>
+  </thead>
+  <tbody>
+    {% for customer in customers %}
+    <tr>
+      <td><a href="{{ url_for('customers.view', customer_id=customer.id) }}">{{ customer.name }}</a></td>
+      <td>{{ customer.email or '' }}</td>
+      <td>{{ customer.mobile or '' }}</td>
+      <td>{{ customer.city or '' }}</td>
+      {% if current_user.is_admin %}<td>{{ ui.active_label(customer.is_active) }}</td>{% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{{ ui.pagination('customers.index', page, per_page, total) }}
+{% else %}
+<p class="muted">No customers match.</p>
+{% endif %}
 {% endblock %}

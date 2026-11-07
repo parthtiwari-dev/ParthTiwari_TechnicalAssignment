@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}{{ 'Edit product' if product else 'New product' }}{% endblock %}
+{% block content %}
+<div class="card form-card">
+  <h1>{{ 'Edit ' ~ product.code if product else 'New product' }}</h1>
+  {% if message %}<div class="message message-error">{{ message }}</div>{% endif %}
+
+  <form method="post" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <label for="code">Code *</label>
+    <input id="code" name="code" value="{{ values.get('code') or '' }}" maxlength="50" required
+           class="{{ 'invalid' if errors.get('code') }}">
+    {{ ui.field_error(errors, 'code') }}
+
+    <label for="name">Name *</label>
+    <input id="name" name="name" value="{{ values.get('name') or '' }}" maxlength="150" required
+           class="{{ 'invalid' if errors.get('name') }}">
+    {{ ui.field_error(errors, 'name') }}
+
+    <label for="category">Category *</label>
+    <input id="category" name="category" value="{{ values.get('category') or '' }}" maxlength="100"
+           list="category-list" required class="{{ 'invalid' if errors.get('category') }}">
+    <datalist id="category-list">
+      {% for name in categories %}<option value="{{ name }}">{% endfor %}
+    </datalist>
+    {{ ui.field_error(errors, 'category') }}
+
+    <label for="price">Price *</label>
+    <input id="price" name="price" type="number" min="0" step="0.01" value="{{ values.get('price') or '' }}"
+           required class="{{ 'invalid' if errors.get('price') }}">
+    {{ ui.field_error(errors, 'price') }}
+
+    {% if product %}
+    <p class="muted">Stock is {{ product.stock_quantity }}. Change it on the
+      <a href="{{ url_for('stock.index', product_id=product.id) }}">stock adjustment page</a>,
+      so every change is recorded with a reason.</p>
+    {% else %}
+    <label for="stock_quantity">Opening stock *</label>
+    <input id="stock_quantity" name="stock_quantity" type="number" min="0" step="1"
+           value="{{ values.get('stock_quantity') or '' }}" required
+           class="{{ 'invalid' if errors.get('stock_quantity') }}">
+    {{ ui.field_error(errors, 'stock_quantity') }}
+    {% endif %}
+
+    <button type="submit" class="button">Save</button>
+    <a href="{{ url_for('products.view', product_id=product.id) if product else url_for('products.index') }}">Cancel</a>
+  </form>
+</div>
+{% endblock %}

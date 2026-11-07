@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}{{ 'Edit customer' if customer else 'New customer' }}{% endblock %}
+{% block content %}
+<div class="card form-card">
+  <h1>{{ 'Edit ' ~ customer.name if customer else 'New customer' }}</h1>
+  {% if message %}<div class="message message-error">{{ message }}</div>{% endif %}
+
+  <form method="post" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <label for="name">Name *</label>
+    <input id="name" name="name" value="{{ values.get('name') or '' }}" maxlength="100" required
+           class="{{ 'invalid' if errors.get('name') }}">
+    {{ ui.field_error(errors, 'name') }}
+
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" value="{{ values.get('email') or '' }}" maxlength="255"
+           class="{{ 'invalid' if errors.get('email') }}">
+    {{ ui.field_error(errors, 'email') }}
+
+    <label for="mobile">Mobile</label>
+    <input id="mobile" name="mobile" value="{{ values.get('mobile') or '' }}" maxlength="20"
+           class="{{ 'invalid' if errors.get('mobile') }}">
+    {{ ui.field_error(errors, 'mobile') }}
+
+    <label for="city">City</label>
+    <input id="city" name="city" value="{{ values.get('city') or '' }}" maxlength="100"
+           class="{{ 'invalid' if errors.get('city') }}">
+    {{ ui.field_error(errors, 'city') }}
+
+    <button type="submit" class="button">Save</button>
+    <a href="{{ url_for('customers.view', customer_id=customer.id) if customer else url_for('customers.index') }}">Cancel</a>
+  </form>
+</div>
+{% endblock %}

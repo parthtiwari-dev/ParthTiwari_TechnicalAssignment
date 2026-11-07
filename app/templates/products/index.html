@@ -1,6 +1,64 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block title %}Products{% endblock %}
 {% block content %}
-<h1>Products</h1>
-<p class="muted">Coming soon.</p>
+<div class="page-head">
+  <h1>Products</h1>
+  {% if current_user.is_admin %}
+  <a class="button" href="{{ url_for('products.create') }}">New product</a>
+  {% endif %}
+</div>
+
+<form method="get" class="filters">
+  <div>
+    <label for="q">Search</label>
+    <input id="q" name="q" value="{{ q }}" placeholder="Code or name">
+  </div>
+  <div>
+    <label for="category">Category</label>
+    <select id="category" name="category">
+      <option value="">All categories</option>
+      {% for name in categories %}
+      <option value="{{ name }}" {% if name == category %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% if current_user.is_admin %}
+  <div>
+    <label for="status">Status</label>
+    <select id="status" name="status">
+      <option value="active" {% if status == 'active' %}selected{% endif %}>Active</option>
+      <option value="inactive" {% if status == 'inactive' %}selected{% endif %}>Inactive</option>
+      <option value="all" {% if status == 'all' %}selected{% endif %}>All</option>
+    </select>
+  </div>
+  {% endif %}
+  <button type="submit" class="button">Search</button>
+</form>
+
+{% if products %}
+<table>
+  <thead>
+    <tr>
+      <th>Code</th><th>Name</th><th>Category</th><th class="number">Price</th><th class="number">Stock</th>
+      {% if current_user.is_admin %}<th>Status</th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for product in products %}
+    <tr>
+      <td><a href="{{ url_for('products.view', product_id=product.id) }}">{{ product.code }}</a></td>
+      <td>{{ product.name }}</td>
+      <td>{{ product.category }}</td>
+      <td class="number">{{ product.price }}</td>
+      <td class="number">{{ product.stock_quantity }}</td>
+      {% if current_user.is_admin %}<td>{{ ui.active_label(product.is_active) }}</td>{% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{{ ui.pagination('products.index', page, per_page, total) }}
+{% else %}
+<p class="muted">No products match.</p>
+{% endif %}
 {% endblock %}

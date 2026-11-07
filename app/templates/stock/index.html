@@ -1,6 +1,65 @@
 {% extends "base.html" %}
-{% block title %}Stock{% endblock %}
+{% import "_macros.html" as ui %}
+{% block title %}Stock adjustment{% endblock %}
 {% block content %}
-<h1>Stock</h1>
-<p class="muted">Coming soon.</p>
+<h1>Stock adjustment</h1>
+
+<div class="card form-card">
+  {% if message %}<div class="message message-error">{{ message }}</div>{% endif %}
+  <p class="muted">Enter a positive number to add stock, a negative number to remove it.
+    Every adjustment is saved as a stock movement with its reason.</p>
+
+  <form method="post" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <label for="product_id">Product *</label>
+    <select id="product_id" name="product_id" required class="{{ 'invalid' if errors.get('product_id') }}">
+      <option value="">Choose a product</option>
+      {% for option in products %}
+      <option value="{{ option.id }}" {% if product and option.id == product.id %}selected{% endif %}>
+        {{ option.code }} · {{ option.name }} (stock {{ option.stock_quantity }}){% if not option.is_active %} · inactive{% endif %}
+      </option>
+      {% endfor %}
+    </select>
+    {{ ui.field_error(errors, 'product_id') }}
+
+    <label for="quantity_change">Change *</label>
+    <input id="quantity_change" name="quantity_change" type="number" step="1"
+           value="{{ values.get('quantity_change') or '' }}" placeholder="e.g. 10 or -3" required
+           class="{{ 'invalid' if errors.get('quantity_change') }}">
+    {{ ui.field_error(errors, 'quantity_change') }}
+
+    <label for="reason">Reason *</label>
+    <input id="reason" name="reason" value="{{ values.get('reason') or '' }}" maxlength="255"
+           placeholder="e.g. Damaged in transit" required class="{{ 'invalid' if errors.get('reason') }}">
+    {{ ui.field_error(errors, 'reason') }}
+
+    <button type="submit" class="button">Save adjustment</button>
+  </form>
+</div>
+
+{% if product %}
+<h2>Latest movements for {{ product.code }} · {{ product.name }} (stock now {{ product.stock_quantity }})</h2>
+{% if movements %}
+<table>
+  <thead>
+    <tr><th>When</th><th>Type</th><th class="number">Change</th><th>Order</th><th>Reason</th><th>By</th></tr>
+  </thead>
+  <tbody>
+    {% for movement in movements %}
+    <tr>
+      <td>{{ movement.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td>{{ movement.movement_type }}</td>
+      <td class="number">{{ '%+d'|format(movement.quantity_change) }}</td>
+      <td>{% if movement.order %}<a href="{{ url_for('orders.view', order_id=movement.order.id) }}">{{ movement.order.order_number }}</a>{% endif %}</td>
+      <td>{{ movement.reason }}</td>
+      <td>{{ movement.creator.name }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">No movements yet.</p>
+{% endif %}
+{% endif %}
 {% endblock %}
