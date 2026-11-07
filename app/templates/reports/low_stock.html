@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Low stock{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('reports.index') }}">&larr; Reports</a></p>
+<h1>Low stock</h1>
+<p class="muted">Active products with stock below the threshold. Inactive products are left out.</p>
+<form method="get" class="filters">
+  <div>
+    <label for="threshold">Stock below</label>
+    <input type="number" id="threshold" name="threshold" min="0" step="1" value="{{ threshold_text }}" required>
+  </div>
+  <button type="submit">Show</button>
+</form>
+{% if error %}
+<div class="message message-error">{{ error }}</div>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th>Code</th>
+      <th>Product</th>
+      <th>Category</th>
+      <th class="number">In stock</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for product in products %}
+    <tr>
+      <td>{{ product.code }}</td>
+      <td>{{ product.name }}</td>
+      <td>{{ product.category }}</td>
+      <td class="number">{{ product.stock_quantity }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">No active product has less than {{ threshold }} in stock.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

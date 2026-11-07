@@ -1,0 +1,15 @@
+{# The From/To date filter shared by the two sales reports. #}
+<form method="get" class="filters">
+  <div>
+    <label for="date_from">From</label>
+    <input type="date" id="date_from" name="date_from" value="{{ date_from }}">
+  </div>
+  <div>
+    <label for="date_to">To</label>
+    <input type="date" id="date_to" name="date_to" value="{{ date_to }}">
+  </div>
+  <button type="submit">Show</button>
+  <a class="button button-secondary" href="{{ request.path }}">Clear</a>
+</form>
+<p class="muted">By order date. Both dates are included. Leave a date empty for no limit.</p>
+{% if error %}<div class="message message-error">{{ error }}</div>{% endif %}

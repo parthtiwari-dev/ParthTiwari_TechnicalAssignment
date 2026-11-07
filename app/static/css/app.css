@@ -128,3 +128,7 @@ td.number, th.number { text-align: right; font-variant-numeric: tabular-nums; }
 .status-draft { background: #fff4ce; }
 .status-confirmed { background: var(--success-bg); color: var(--success-text); }
 .status-cancelled { background: #e4e7eb; color: var(--muted); }
+
+/* Reports and import */
+.report-list li { margin-bottom: 0.5rem; }
+.pagination { display: flex; gap: 1rem; align-items: center; margin-top: 1rem; }
