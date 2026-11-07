@@ -30,6 +30,22 @@ def test_unknown_email_rejected(client):
     assert response.status_code == 401
 
 
+def test_unknown_email_still_checks_a_password_hash(client, monkeypatch):
+    # So an unknown email takes as long as a wrong password, and timing can't reveal emails.
+    from app.web import auth
+
+    checked = []
+
+    def fake_check(password_hash, password):
+        checked.append(password_hash)
+        return False
+
+    monkeypatch.setattr(auth, "check_password_hash", fake_check)
+    response = client.post("/login", data={"email": "nobody@test.local", "password": "x"})
+    assert response.status_code == 401
+    assert checked == [auth.DUMMY_PASSWORD_HASH]
+
+
 def test_pages_require_login(client):
     response = client.get("/orders/")
     assert response.status_code == 302
