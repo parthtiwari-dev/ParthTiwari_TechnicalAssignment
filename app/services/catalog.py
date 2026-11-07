@@ -265,17 +265,22 @@ def update_customer(customer_id, data):
 
 def delete_customer(customer_id):
     """Delete a customer that no order uses. Otherwise refuse and suggest deactivating."""
+    in_use_message = None
     try:
         customer = get_customer(customer_id)
+        in_use_message = f"{customer.name} has orders, so it can't be deleted. Deactivate it instead."
         used = db.session.scalar(
             select(SalesOrder.id).where(SalesOrder.customer_id == customer.id).limit(1)
         )
         if used is not None:
-            raise ConflictError(
-                f"{customer.name} has orders, so it can't be deleted. Deactivate it instead."
-            )
+            raise ConflictError(in_use_message)
         db.session.delete(customer)
         db.session.commit()
+    except IntegrityError:
+        # An order for this customer was saved between our check and our delete. The foreign
+        # key (ON DELETE RESTRICT) refused the delete, so give the same answer as the check.
+        db.session.rollback()
+        raise ConflictError(in_use_message)
     except Exception:
         db.session.rollback()
         raise
@@ -348,8 +353,13 @@ def delete_product(product_id):
 
     A product created with opening stock already has a movement, so it can only be deactivated.
     """
+    in_use_message = None
     try:
         product = get_product(product_id)
+        in_use_message = (
+            f"{product.code} is used by orders or stock history, so it can't be deleted. "
+            "Deactivate it instead."
+        )
         in_order = db.session.scalar(
             select(SalesOrderItem.id).where(SalesOrderItem.product_id == product.id).limit(1)
         )
@@ -357,12 +367,14 @@ def delete_product(product_id):
             select(StockMovement.id).where(StockMovement.product_id == product.id).limit(1)
         )
         if in_order is not None or has_movement is not None:
-            raise ConflictError(
-                f"{product.code} is used by orders or stock history, so it can't be deleted. "
-                "Deactivate it instead."
-            )
+            raise ConflictError(in_use_message)
         db.session.delete(product)
         db.session.commit()
+    except IntegrityError:
+        # An order item or movement for this product was saved between our check and our
+        # delete. The foreign key refused the delete, so give the same answer as the check.
+        db.session.rollback()
+        raise ConflictError(in_use_message)
     except Exception:
         db.session.rollback()
         raise

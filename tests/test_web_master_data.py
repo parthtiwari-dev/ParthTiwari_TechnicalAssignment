@@ -1,10 +1,13 @@
 """Customer and product pages: admin CRUD, sales users read-only, safe delete, validation."""
 from decimal import Decimal
 
+import pytest
 from sqlalchemy import select
 
+from app.errors import ConflictError
 from app.extensions import db
 from app.models import MOVEMENT_OPENING, Customer, Product, StockMovement
+from app.services import catalog
 
 
 # ---------------------------------------------------------------------------
@@ -251,3 +254,35 @@ def test_sales_user_sees_only_active_products_and_cannot_change_them(client, log
     assert client.post(f"/products/{active.id}/deactivate").status_code == 403
     db.session.refresh(active)
     assert active.is_active
+
+
+# ---------------------------------------------------------------------------
+# Delete races: an order is saved between the "is it used?" check and the delete
+# ---------------------------------------------------------------------------
+
+def _pretend_nothing_uses_it(monkeypatch):
+    """Make the "is it used?" checks find nothing, as if the order arrived just after them.
+    Only the database's foreign key is left to stop the delete."""
+    monkeypatch.setattr(db.session, "scalar", lambda *args, **kwargs: None)
+
+
+def test_customer_delete_race_gives_the_same_conflict(
+    app, monkeypatch, sales_user, customer, make_product, make_order
+):
+    make_order(sales_user, customer, [(make_product(), 1)])
+    _pretend_nothing_uses_it(monkeypatch)
+
+    with pytest.raises(ConflictError, match="has orders, so it can't be deleted"):
+        catalog.delete_customer(customer.id)
+    monkeypatch.undo()
+    assert db.session.get(Customer, customer.id) is not None
+
+
+def test_product_delete_race_gives_the_same_conflict(app, monkeypatch, make_product):
+    product = make_product(stock=5)  # has an opening stock movement
+    _pretend_nothing_uses_it(monkeypatch)
+
+    with pytest.raises(ConflictError, match="is used by orders or stock history"):
+        catalog.delete_product(product.id)
+    monkeypatch.undo()
+    assert db.session.get(Product, product.id) is not None
