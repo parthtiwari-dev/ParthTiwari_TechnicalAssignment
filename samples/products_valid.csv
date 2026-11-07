@@ -1,0 +1,7 @@
+product_code,product_name,category,price,stock_quantity,status
+PRD-001,Keyboard,Accessories,1500,20,Active
+PRD-002,Mouse,Accessories,500,50,Active
+PRD-003,Webcam 1080p,Accessories,2499.50,15,Active
+PRD-004,32-inch Monitor,Monitors,24999,5,Active
+PRD-005,2 TB External Drive,Storage,7999.99,0,Active
+PRD-006,Old Model Printer,Printers,8500,2,Inactive
