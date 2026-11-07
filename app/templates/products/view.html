@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}{{ product.code }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('products.index') }}">&larr; Products</a></p>
+<div class="card">
+  <h1>{{ product.code }} · {{ product.name }} {{ ui.active_label(product.is_active) }}</h1>
+  <dl class="details">
+    <dt>Category</dt><dd>{{ product.category }}</dd>
+    <dt>Price</dt><dd>{{ product.price }}</dd>
+    <dt>Stock</dt><dd>{{ product.stock_quantity }}</dd>
+  </dl>
+
+  {% if current_user.is_admin %}
+  <div class="actions">
+    <a class="button" href="{{ url_for('products.edit', product_id=product.id) }}">Edit</a>
+    <a class="button button-secondary" href="{{ url_for('stock.index', product_id=product.id) }}">Adjust stock</a>
+    {% if product.is_active %}
+      {{ ui.post_button(url_for('products.deactivate', product_id=product.id), 'Deactivate') }}
+    {% else %}
+      {{ ui.post_button(url_for('products.activate', product_id=product.id), 'Activate') }}
+    {% endif %}
+    {{ ui.post_button(url_for('products.delete', product_id=product.id), 'Delete', 'button-danger',
+                      'Delete ' ~ product.code ~ '? This cannot be undone.') }}
+  </div>
+  <p class="muted">A product used by an order or with stock history can't be deleted. Deactivate it instead.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,35 @@
+{# Small pieces several pages share. Import with: {% import "_macros.html" as ui %} #}
+
+{# "Page 2 of 5" with Previous / Next links. Keeps the current search and filters in the links. #}
+{% macro pagination(endpoint, page, per_page, total) %}
+  {% set pages = ((total + per_page - 1) // per_page) or 1 %}
+  {% if pages > 1 %}
+  <nav class="pagination">
+    {% if page > 1 %}
+      <a href="{{ url_for(endpoint, **dict(request.args.to_dict(), page=page - 1)) }}">&larr; Previous</a>
+    {% endif %}
+    <span class="muted">Page {{ page }} of {{ pages }} ({{ total }} in all)</span>
+    {% if page < pages %}
+      <a href="{{ url_for(endpoint, **dict(request.args.to_dict(), page=page + 1)) }}">Next &rarr;</a>
+    {% endif %}
+  </nav>
+  {% endif %}
+{% endmacro %}
+
+{# The error message for one form field, if there is one. #}
+{% macro field_error(errors, field) %}
+  {% if errors.get(field) %}<div class="field-error">{{ errors[field] }}</div>{% endif %}
+{% endmacro %}
+
+{# A one-button POST form, e.g. Delete or Deactivate. confirm_text asks first in the browser. #}
+{% macro post_button(action, label, css_class="button-secondary", confirm_text=None) %}
+  <form method="post" action="{{ action }}" class="inline"
+        {% if confirm_text %}onsubmit="return window.confirm({{ confirm_text|tojson|forceescape }});"{% endif %}>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="button {{ css_class }}">{{ label }}</button>
+  </form>
+{% endmacro %}
+
+{% macro active_label(is_active) %}
+  {% if is_active %}<span class="status status-confirmed">Active</span>{% else %}<span class="status status-cancelled">Inactive</span>{% endif %}
+{% endmacro %}

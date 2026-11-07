@@ -128,3 +128,23 @@ td.number, th.number { text-align: right; font-variant-numeric: tabular-nums; }
 .status-draft { background: #fff4ce; }
 .status-confirmed { background: var(--success-bg); color: var(--success-text); }
 .status-cancelled { background: #e4e7eb; color: var(--muted); }
+
+/* Page pieces for lists, detail pages and the order form */
+.page-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.page-head .button { margin-top: 0; }
+.filters .button { margin-top: 0; }
+.filters label { margin-top: 0; }
+.pagination { display: flex; gap: 1rem; align-items: center; margin-top: 1rem; }
+.actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 1rem; }
+.actions .button, .actions button { margin-top: 0; }
+form.inline { display: inline; margin: 0; }
+.details { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; margin: 0 0 1rem; }
+.details dt { font-weight: 600; }
+.details dd { margin: 0; }
+.form-card { max-width: 560px; }
+.short-input { max-width: 8rem; }
+.items-table td { vertical-align: top; }
+.totals { width: auto; min-width: 280px; margin: 1rem 0 0 auto; }
+.total-row td { font-weight: 700; }
+.page-head h1, h1 .status { vertical-align: middle; }
+h1 .status { font-size: 0.6em; font-weight: 600; }
