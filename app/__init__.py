@@ -17,11 +17,13 @@ def create_app(config_class=Config):
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)
-    csrf.init_app(app)
 
     register_blueprints(app)
     register_error_handlers(app)
     setup_login(app)
+    # After setup_login, so the login check runs first: a logged-out API call gets 401,
+    # not a "missing CSRF token" 400.
+    csrf.init_app(app)
 
     @app.route("/")
     def home():
@@ -63,7 +65,8 @@ def setup_login(app):
         # API callers get JSON. A person in the browser goes to the login page and comes back after.
         if is_api_request():
             return json_error("Please log in first.", 401)
-        return redirect(url_for("auth.login", next=request.full_path))
+        next_url = request.full_path if request.query_string else request.path
+        return redirect(url_for("auth.login", next=next_url))
 
     @app.before_request
     def require_login():
