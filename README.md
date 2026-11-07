@@ -118,7 +118,7 @@ against wiping real data.
 pytest -q
 ```
 
-Result on the submitted code: **202 passed**.
+Result on the submitted code: **203 passed**.
 
 | File | What it proves |
 |---|---|
