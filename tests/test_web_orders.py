@@ -99,3 +99,10 @@ def test_edit_form_carries_the_order_for_the_script(client, login, sales_user, c
     assert page.status_code == 200
     assert f'data-order-id="{order.id}"'.encode() in page.data
     assert order.order_number.encode() in page.data
+
+
+def test_stock_movement_report_links_to_the_order(client, login, admin_user, customer, make_product, make_order):
+    order = confirm_order(make_order(admin_user, customer, [(make_product(), 1)]).id, admin_user)
+    login(client, admin_user)
+    page = client.get("/reports/stock-movements").get_data(as_text=True)
+    assert f'<a href="/orders/{order.id}">{order.order_number}</a>' in page
