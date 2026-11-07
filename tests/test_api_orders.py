@@ -440,3 +440,13 @@ def test_admin_can_confirm_a_sales_users_order(
     login(client, admin_user)
     assert client.post(f"/api/orders/{order.id}/confirm").status_code == 200
     assert stock_of(product) == 6
+
+
+def test_order_too_large_for_the_database_gives_422_not_500(client, login, sales_user, customer, make_product):
+    product = make_product(price="100000.00")
+    login(client, sales_user)
+
+    response = client.post("/api/orders", json=order_body(customer, [(product, 1_000_000)]))
+
+    assert response.status_code == 422
+    assert "items[0].quantity" in response.get_json()["details"]

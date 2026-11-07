@@ -13,7 +13,11 @@ from app.errors import ValidationError
 CENT = Decimal("0.01")
 MAX_DISCOUNT_PERCENT = Decimal("20")
 MAX_PRICE = Decimal("9999999999.99")  # the largest value DECIMAL(12,2) can hold
-MAX_QUANTITY = 1_000_000  # keeps quantity x rate far inside DECIMAL(12,2) and MySQL INT
+MAX_MONEY = MAX_PRICE  # the same limit for every money column: amounts and order totals
+# The most of one product in one order or in stock. Keeps quantities inside MySQL INT.
+# It does not keep quantity x rate inside DECIMAL(12,2) (1,000,000 x 100,000.00 is too big),
+# so calculate_totals() checks every amount against MAX_MONEY as well.
+MAX_QUANTITY = 1_000_000
 
 WHOLE_NUMBER = re.compile(r"-?\d+")
 
@@ -122,13 +126,27 @@ def calculate_totals(lines, discount_percent):
 
     Each amount is rounded before it is added up, so the subtotal always equals the sum of
     the amounts the user sees on screen.
+
+    An amount or subtotal too big for the DECIMAL(12,2) columns raises ValidationError, keyed
+    "items[0].quantity" for one line (0 is its position) or "items" for the subtotal.
     """
     discount_percent = parse_discount(discount_percent)
     amounts = []
-    for quantity, rate in lines:
+    for index, (quantity, rate) in enumerate(lines):
         quantity = parse_quantity(quantity)
-        amounts.append(round_money(quantity * Decimal(rate)))
+        amount = round_money(quantity * Decimal(rate))
+        if amount > MAX_MONEY:
+            raise ValidationError(
+                f"The amount for line {index + 1} is too large. The limit is {MAX_MONEY:,}.",
+                {f"items[{index}].quantity": f"Amount too large (at most {MAX_MONEY:,})."},
+            )
+        amounts.append(amount)
     subtotal = round_money(sum(amounts, Decimal("0")))
+    if subtotal > MAX_MONEY:
+        raise ValidationError(
+            f"The order total is too large. The limit is {MAX_MONEY:,}.",
+            {"items": f"Order total too large (at most {MAX_MONEY:,})."},
+        )
     discount_amount = round_money(subtotal * discount_percent / 100)
     grand_total = subtotal - discount_amount
     return {

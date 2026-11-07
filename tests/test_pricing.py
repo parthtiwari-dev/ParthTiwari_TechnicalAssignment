@@ -98,3 +98,22 @@ def test_bad_price_rejected(price):
 
 def test_price_parsed_to_two_places():
     assert parse_price("1500") == Decimal("1500.00")
+
+
+def test_line_amount_too_large_for_the_database_rejected():
+    # 1,000,000 x 100,000.00 = 100,000,000,000.00, more than DECIMAL(12,2) can hold.
+    with pytest.raises(ValidationError) as error:
+        calculate_totals([(1, Decimal("10.00")), (1_000_000, Decimal("100000.00"))], "0")
+    assert list(error.value.details) == ["items[1].quantity"]
+
+
+def test_subtotal_too_large_for_the_database_rejected():
+    # Each line fits, but together they don't.
+    with pytest.raises(ValidationError) as error:
+        calculate_totals([(1, Decimal("6000000000.00")), (1, Decimal("6000000000.00"))], "0")
+    assert list(error.value.details) == ["items"]
+
+
+def test_largest_total_that_fits_is_accepted():
+    totals = calculate_totals([(1, Decimal("9999999999.99"))], "0")
+    assert totals["grand_total"] == Decimal("9999999999.99")

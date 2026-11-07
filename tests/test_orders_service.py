@@ -241,3 +241,11 @@ def test_admin_can_confirm_any_order(admin_user, sales_user, customer, make_prod
 
     assert order.status == STATUS_CONFIRMED
     assert product.stock_quantity == 8
+
+
+def test_order_too_large_for_the_database_is_rejected(sales_user, customer, make_product):
+    product = make_product(price="100000.00")
+    with pytest.raises(ValidationError) as error:
+        create_draft_order(sales_user, customer.id, [{"product_id": product.id, "quantity": 1_000_000}], "0")
+    assert "items[0].quantity" in error.value.details
+    assert db.session.scalar(select(func.count(SalesOrder.id))) == 0
