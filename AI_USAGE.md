@@ -45,9 +45,9 @@ Most of it. I want to be plain about that.
   `SELECT ... FOR UPDATE` lock removed. It failed by selling 8 units from a stock of 5, which
   shows the test really depends on the lock. The lock was then put back.
 - **The JavaScript was driven in a real headless Chrome** against the running app and the real
-  API (46 checks): product
-  lookup, row add and remove, live totals for the PDF example, validation messages, save,
-  confirm, cancel and the stock shortage message.
+  API, in 46 checks. They covered product lookup, adding and removing rows, live totals for the
+  PDF example, validation messages, save, edit, confirm, cancel, the stock shortage message,
+  CSV import and the report pages.
 - **The five SQL queries** were run against the sample data, and a test runs each one.
 - **Every README claim was checked against the code** before committing. Two were wrong and were
   fixed: it said the UI shows a ₹ sign (it doesn't), and it overstated where the tests are
