@@ -10,7 +10,7 @@ Tracebacks are logged on the server and never sent to the browser.
 from urllib.parse import urlparse
 
 from flask import flash, jsonify, redirect, render_template, request, url_for
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 
 from app.extensions import db
 
@@ -71,6 +71,15 @@ def register_error_handlers(app):
             return render_template("errors.html", code=error.status_code, message=error.message), error.status_code
         # 422 and 409 on a page: show the message on the page the user came from.
         flash(error.message, "error")
+        return redirect_back()
+
+    @app.errorhandler(RequestEntityTooLarge)
+    def handle_too_large(error):
+        # The request was bigger than MAX_CONTENT_LENGTH (2 MB, in config.py). The only upload
+        # is the CSV import, whose own limit is 1 MB, so the page message quotes that limit.
+        if is_api_request():
+            return json_error("The request is too large.", 413)
+        flash("The file is too large. The limit is 1 MB. Nothing was imported.", "error")
         return redirect_back()
 
     @app.errorhandler(HTTPException)

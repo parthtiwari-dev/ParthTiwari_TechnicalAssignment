@@ -14,6 +14,8 @@ class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY")
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # Refuse any request body over 2 MB before reading it (413). The CSV import allows 1 MB.
+    MAX_CONTENT_LENGTH = 2 * 1024 * 1024
     SQLALCHEMY_ENGINE_OPTIONS = {
         # READ COMMITTED: every query sees the latest committed data. The rows we change
         # are protected by SELECT ... FOR UPDATE locks (see services/orders.py), not by

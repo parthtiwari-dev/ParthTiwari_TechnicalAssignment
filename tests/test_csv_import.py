@@ -284,3 +284,29 @@ def test_page_needs_a_file(client, login, admin_user):
     login(client, admin_user)
     response = client.post("/import/", data={}, content_type="multipart/form-data")
     assert "Choose a CSV file to upload." in response.get_data(as_text=True)
+
+
+def test_upload_over_the_request_limit_shows_a_friendly_message(client, login, admin_user):
+    # Over MAX_CONTENT_LENGTH (2 MB): Flask refuses it with 413 before reading it.
+    login(client, admin_user)
+    data = b"x" * (3 * 1024 * 1024)
+    response = client.post(
+        "/import/",
+        data={"file": (io.BytesIO(data), "big.csv")},
+        content_type="multipart/form-data",
+        headers={"Referer": "http://localhost/import/"},
+    )
+    assert response.status_code == 302
+    assert response.headers["Location"] == "http://localhost/import/"
+    page = client.get("/import/").get_data(as_text=True)
+    assert "The file is too large. The limit is 1 MB." in page
+    assert product_count() == 0
+
+
+def test_api_request_over_the_limit_gets_json_413(client, login, sales_user):
+    login(client, sales_user)
+    response = client.post(
+        "/api/orders", data=b"x" * (3 * 1024 * 1024), content_type="application/json"
+    )
+    assert response.status_code == 413
+    assert response.get_json() == {"error": "The request is too large.", "details": {}}
