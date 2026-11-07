@@ -65,8 +65,11 @@ Active products only, sorted by code. Query parameters, all optional:
 |---|---|
 | `q` | text in the code or name |
 | `category` | exact category |
-| `page` | page number, from 1 (default 1) |
-| `per_page` | 1 to 100 (default 20; above 100 is treated as 100) |
+| `page` | page number, from 1 (default 1; below 1 is treated as 1, above 100000 as 100000) |
+| `per_page` | 1 to 100 (default 20; below 1 is treated as 1, above 100 as 100) |
+
+`page` and `per_page` must be whole numbers written with the digits 0–9, at most 18
+characters. Anything else gives `422`. The response says which `page` and `per_page` were used.
 
 `GET /api/products?page=1&per_page=3` → `200`
 

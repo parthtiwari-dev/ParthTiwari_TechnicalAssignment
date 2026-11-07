@@ -1,4 +1,4 @@
-"""The stock adjustment page: reason required, never below zero or above the cap, one movement per adjustment."""
+"""The stock adjustment page: reason required, stock kept between zero and the cap, one movement each."""
 import pytest
 from sqlalchemy import func, select
 

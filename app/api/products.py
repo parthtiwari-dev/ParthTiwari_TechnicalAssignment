@@ -31,7 +31,7 @@ def list_products():
     if errors:
         raise ValidationError("Page and per_page must be whole numbers.", errors)
 
-    # search_products keeps page at 1 or more and per_page between 1 and 100,
+    # search_products moves page into 1..100000 and per_page into 1..100,
     # and gives back the values it actually used.
     products, total, page, per_page = search_products(
         q=request.args.get("q"),

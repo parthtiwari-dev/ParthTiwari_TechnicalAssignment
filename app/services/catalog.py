@@ -26,6 +26,9 @@ from app.services.stock import change_stock
 
 DEFAULT_PER_PAGE = 20
 MAX_PER_PAGE = 100
+# A page number above this is treated as this. It keeps the OFFSET a number MySQL accepts
+# (page=99999999999999999999 used to fail with a 500) and is far beyond any real list.
+MAX_PAGE = 100_000
 
 # Loose checks only: something@something.something, and digits with + - or spaces.
 EMAIL_PATTERN = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
@@ -37,9 +40,17 @@ MOBILE_PATTERN = re.compile(r"\+?[0-9][0-9 \-]{5,19}")
 # ---------------------------------------------------------------------------
 
 def _paginate(query, page, per_page):
-    """Run query for one page. Returns (rows, total). Bad page numbers fall back to safe values."""
-    page = max(int(page or 1), 1)
-    per_page = min(max(int(per_page or DEFAULT_PER_PAGE), 1), MAX_PER_PAGE)
+    """Run query for one page. Returns (rows, total, page, per_page), with the values it used.
+
+    Out-of-range values are moved to the nearest allowed one: page to 1..MAX_PAGE,
+    per_page to 1..MAX_PER_PAGE. None means the default (page 1, DEFAULT_PER_PAGE).
+    """
+    if page is None:
+        page = 1
+    if per_page is None:
+        per_page = DEFAULT_PER_PAGE
+    page = min(max(page, 1), MAX_PAGE)
+    per_page = min(max(per_page, 1), MAX_PER_PAGE)
     total = db.session.scalar(select(func.count()).select_from(query.subquery()))
     rows = db.session.scalars(query.limit(per_page).offset((page - 1) * per_page)).all()
     return rows, total, page, per_page

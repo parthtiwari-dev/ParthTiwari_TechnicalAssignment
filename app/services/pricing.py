@@ -19,7 +19,11 @@ MAX_MONEY = MAX_PRICE  # the same limit for every money column: amounts and orde
 # so calculate_totals() checks every amount against MAX_MONEY as well.
 MAX_QUANTITY = 1_000_000
 
-WHOLE_NUMBER = re.compile(r"-?\d+")
+# ASCII digits only. \d would also accept other scripts' digits, like fullwidth "１２".
+WHOLE_NUMBER = re.compile(r"-?[0-9]+")
+# Longer input is refused before int() runs. Python's int() refuses strings over 4300
+# digits with an error of its own, and nothing in this app needs a number this long.
+MAX_WHOLE_NUMBER_LENGTH = 18
 
 
 def _label(field):
@@ -36,17 +40,26 @@ def parse_int(value, field):
     """Turn input into a whole number, or raise ValidationError.
 
     Accepts an int, or a string like "3" (HTML forms and CSV files send strings).
-    Rejects True/False (Python treats them as 1/0), floats like 2.5, and text like "2.5" or "abc".
+    Rejects True/False (Python treats them as 1/0), floats like 2.5, text like "2.5" or "abc",
+    and anything longer than 18 characters (or an int that big) as too large.
     """
+    not_whole = ValidationError(f"{_label(field)} must be a whole number.", {field: "Must be a whole number."})
     if isinstance(value, bool):
-        raise ValidationError(f"{_label(field)} must be a whole number.", {field: "Must be a whole number."})
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str) and WHOLE_NUMBER.fullmatch(value.strip()):
-        return int(value.strip())
+        raise not_whole
     if value is None or (isinstance(value, str) and value.strip() == ""):
         raise ValidationError(f"{_label(field)} is required.", {field: "Required."})
-    raise ValidationError(f"{_label(field)} must be a whole number.", {field: "Must be a whole number."})
+    if isinstance(value, str):
+        text = value.strip()
+        if len(text) > MAX_WHOLE_NUMBER_LENGTH:
+            raise ValidationError(f"{_label(field)} is too large.", {field: "Too large."})
+        if not WHOLE_NUMBER.fullmatch(text):
+            raise not_whole
+        value = int(text)
+    if not isinstance(value, int):
+        raise not_whole
+    if abs(value) >= 10 ** MAX_WHOLE_NUMBER_LENGTH:
+        raise ValidationError(f"{_label(field)} is too large.", {field: "Too large."})
+    return value
 
 
 def parse_quantity(value, field="quantity"):
