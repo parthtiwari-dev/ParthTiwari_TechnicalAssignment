@@ -17,7 +17,7 @@ browser ──► routes (web pages + JSON API)
 Pages and API endpoints are both thin. They call the same service functions, so a rule
 (a discount limit, a stock check, an ownership check) is written once and enforced in both places.
 
-## Planned layout
+## Layout
 
 ```
 app/
@@ -25,7 +25,9 @@ app/
   config.py            settings from environment variables
   extensions.py        db, migrate, login_manager, csrf
   models.py            User, Customer, Product, SalesOrder, SalesOrderItem, StockMovement
-  permissions.py       admin_required, get_order_for_user()
+  permissions.py       admin_required, require_admin, get_order_for_user()
+  errors.py            error types and the handlers that turn them into responses
+  serializers.py       models -> dicts for JSON (order_to_dict, product_to_dict)
   services/
     pricing.py         money rounding and order totals (the only place totals are computed)
     orders.py          create/edit Draft, confirm, cancel
@@ -61,7 +63,8 @@ to delete a customer or product that an order uses. The app checks first so it c
 message, and offers deactivation instead.
 
 `rate` is copied from the product's price when the item is added, so later price changes don't
-alter existing orders.
+alter existing orders. Editing a Draft keeps the stored rate for products already on it; only a
+newly added product takes today's price.
 
 ## Money
 
@@ -97,9 +100,14 @@ alter existing orders.
 - if the order is `draft`, it just sets `cancelled`;
 - if it's `confirmed`, it locks the products, adds the stock back, writes `cancellation`
   movements and sets `cancelled`;
-- if it's already `cancelled`, it changes nothing.
+- if it's already `cancelled`, it changes nothing and reports a conflict (409).
 
 Stock adjustments by an Admin lock the product row too, and refuse to go below zero.
+
+The database connection uses `READ COMMITTED`, so every query sees the latest committed data.
+The locks above, not MySQL's default `REPEATABLE READ` snapshot, are what keep stock correct.
+`tests/test_concurrency.py` holds a product lock, starts two confirms against it, then releases
+it: exactly one confirm succeeds. With the lock removed, both succeed and stock is oversold.
 
 ## Permissions
 
@@ -115,3 +123,78 @@ The API always returns JSON: `{"error": "<message>", "details": {...}}`, with st
 400/422 (bad input), 401 (not logged in), 403 (not allowed), 404 (missing), 409 (conflict, e.g.
 not enough stock or the order isn't a draft). Unexpected errors return 500 with a generic
 message. Tracebacks are only logged, never sent.
+
+## Service functions and API contract
+
+### Services
+
+Every service function that changes data owns its transaction: it commits on success and rolls
+back on any error. Routes never commit. Errors come from `app/errors.py`:
+
+| Error | Status | When |
+|---|---|---|
+| `ValidationError(message, details)` | 422 | bad input; `details` maps field -> message |
+| `NotFoundError(message)` | 404 | record doesn't exist |
+| `ForbiddenError(message)` | 403 | logged in, but not allowed |
+| `ConflictError(message, details)` | 409 | valid request that clashes with current state |
+
+`services/orders.py`
+- `create_draft_order(user, customer_id, items, discount_percent) -> SalesOrder`
+- `update_draft_order(order_id, user, customer_id, items, discount_percent) -> SalesOrder` (draft only, else ConflictError)
+- `confirm_order(order_id, user) -> SalesOrder` (not draft -> ConflictError; short stock -> ConflictError with `details.shortages = [{product_id, code, requested, available}]`)
+- `cancel_order(order_id, user) -> SalesOrder` (already cancelled -> ConflictError)
+- `items` is a list of `{"product_id": ..., "quantity": ...}`. Anything else in an item (a rate, an amount) is ignored.
+- Validation `details` keys: `customer_id`, `discount_percent`, `items`, `items[0].product_id`, `items[0].quantity` (0 = the row's position in the list).
+- Ownership: all four use `get_order_for_user`, so a sales user on someone else's order gets ForbiddenError.
+
+`services/stock.py`
+- `adjust_stock(product_id, quantity_change, reason, user) -> Product` (admin; non-zero whole number; reason required; never below zero)
+- `change_stock(product, quantity_change, movement_type, user, reason, order=None)` changes `stock_quantity` and adds the movement row. It doesn't commit. It is the only code that changes stock. For opening stock: create the product with `stock_quantity=0`, then call `change_stock(product, qty, "opening", user, "Opening stock")` if qty > 0.
+- `lock_products(product_ids) -> {id: Product}` (SELECT ... FOR UPDATE, in id order)
+
+`services/pricing.py`
+- `round_money(value)`, `calculate_totals(lines, discount_percent)` with `lines = [(quantity, rate), ...]` -> `{"amounts", "subtotal", "discount_amount", "grand_total"}`
+- Input parsers, each returns a clean value or raises ValidationError: `parse_int`, `parse_quantity` (1 or more), `parse_stock_quantity` (0 or more), `parse_price` (0 or more, 2 dp), `parse_discount` (0 to 20, 2 dp, blank = 0)
+
+`permissions.py`
+- `get_order_for_user(order_id, user, lock=False)` -> order, or NotFoundError / ForbiddenError ("You do not have access to this order.")
+- `admin_required` decorator for one route; `bp.before_request(require_admin)` for a whole admin-only blueprint
+
+Login is required for every route by `require_login` in `app/__init__.py`; only `auth.login` and
+`static` are open. Page forms that POST include
+`<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">`.
+
+### API
+
+- All JSON. Money is a string with 2 decimal places (`"1500.00"`). Session-cookie auth (log in
+  through the normal login page). POST and PUT need the header `X-CSRFToken`, read from
+  `<meta name="csrf-token">` in `base.html`.
+- Errors: `{"error": "<message>", "details": {...}}` with 400 malformed JSON, 401 not logged in,
+  403 not allowed, 404 missing, 409 conflict, 422 validation (`details` maps field -> message).
+  Unexpected errors: 500 with a generic message, no traceback.
+- Read request bodies with `app.api.json_body()` (400 if the body isn't a JSON object).
+
+| Method | Path | Body | Success |
+|---|---|---|---|
+| GET | `/api/products?q=&category=&page=1&per_page=20` | | 200 `{"items": [product], "page", "per_page", "total"}`, active products only |
+| GET | `/api/products/<id>` | | 200 product (active only, else 404) |
+| POST | `/api/orders` | order body | 201 order |
+| PUT | `/api/orders/<id>` | order body | 200 order (draft only) |
+| GET | `/api/orders/<id>` | | 200 order |
+| POST | `/api/orders/<id>/confirm` | | 200 order, or 409 with `details.shortages` |
+| POST | `/api/orders/<id>/cancel` | | 200 order |
+
+Order body: `{"customer_id": 1, "discount_percent": "10", "items": [{"product_id": 1, "quantity": 2}]}`
+
+Product: `{"id", "code", "name", "category", "price", "stock_quantity"}` (`serializers.product_to_dict`)
+
+Order (`serializers.order_to_dict`):
+
+```json
+{"id": 7, "order_number": "SO-000007", "customer": {"id": 1, "name": "Sharma Traders"},
+ "order_date": "2026-11-07", "status": "draft", "discount_percent": "10.00",
+ "subtotal": "4500.00", "discount_amount": "450.00", "grand_total": "4050.00",
+ "created_by": {"id": 2, "name": "Ravi Sales"},
+ "items": [{"id": 1, "product": {"id": 1, "code": "ACC-001", "name": "Keyboard"},
+            "quantity": 2, "rate": "1500.00", "amount": "3000.00"}]}
+```
