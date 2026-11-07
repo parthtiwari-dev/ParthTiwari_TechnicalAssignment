@@ -13,6 +13,10 @@ PUBLIC_ENDPOINTS = {"auth.login", "static"}
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
+    if not app.config.get("SECRET_KEY"):
+        # Without it Flask can't sign the login cookie or the CSRF tokens. Stop now with a
+        # clear message, instead of failing later on the first login.
+        raise RuntimeError("SECRET_KEY is not set. Add a long random string to .env (see .env.example).")
 
     db.init_app(app)
     migrate.init_app(app, db)

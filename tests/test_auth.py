@@ -115,3 +115,14 @@ def test_sales_nav_hides_admin_links(client, login, sales_user):
     login(client, sales_user)
     page = client.get("/orders/")
     assert b'href="/reports/"' not in page.data
+
+
+def test_app_refuses_to_start_without_a_secret_key():
+    from app import create_app
+    from app.config import TestConfig
+
+    class NoSecretConfig(TestConfig):
+        SECRET_KEY = None
+
+    with pytest.raises(RuntimeError, match="SECRET_KEY is not set"):
+        create_app(NoSecretConfig)
