@@ -1,7 +1,8 @@
 """The orders API: create, edit, view, confirm, cancel. Status codes, JSON errors, stock and
 ownership, checked through real HTTP requests.
 
-The Part 12 scenarios from the assignment are all here at the API level (marked "Part 12").
+The Part 12 order scenarios from the assignment are here at the API level (marked "Part 12").
+The one about CSV import (one bad row imports nothing) is in test_csv_import.py, also marked.
 """
 import re
 

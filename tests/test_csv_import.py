@@ -52,6 +52,7 @@ def test_valid_file_imports_every_product_with_opening_stock(admin_user):
 
 
 def test_one_bad_row_imports_nothing(admin_user):
+    """Part 12: a CSV file with one bad row imports nothing."""
     data = csv_bytes(
         "PRD-001,Keyboard,Accessories,1500,20,Active",
         "PRD-002,Mouse,Accessories,-5,50,Active",
