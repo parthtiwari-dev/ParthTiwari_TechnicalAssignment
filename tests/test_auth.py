@@ -13,6 +13,14 @@ def test_login_with_correct_password(client, sales_user):
     assert b"Sales One" in page.data
 
 
+def test_login_cookie_is_httponly_and_samesite_lax(client, sales_user):
+    response = client.post("/login", data={"email": sales_user.email, "password": PASSWORD})
+    cookie = response.headers["Set-Cookie"]
+    assert cookie.startswith("session=")
+    assert "HttpOnly" in cookie
+    assert "SameSite=Lax" in cookie
+
+
 def test_email_is_matched_case_insensitively(client, sales_user):
     response = client.post("/login", data={"email": sales_user.email.upper(), "password": PASSWORD})
     assert response.status_code == 302

@@ -16,6 +16,10 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     # Refuse any request body over 2 MB before reading it (413). The CSV import allows 1 MB.
     MAX_CONTENT_LENGTH = 2 * 1024 * 1024
+    # The login cookie: JavaScript can't read it (HttpOnly, Flask's default, kept on), and
+    # the browser doesn't send it with forms posted from other sites (SameSite=Lax).
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
     SQLALCHEMY_ENGINE_OPTIONS = {
         # READ COMMITTED: every query sees the latest committed data. The rows we change
         # are protected by SELECT ... FOR UPDATE locks (see services/orders.py), not by
