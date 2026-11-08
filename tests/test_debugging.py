@@ -1,4 +1,6 @@
 """The debugging exercise: the fixed calculate_total, compared with the original buggy one."""
+from decimal import Decimal
+
 import pytest
 
 from debugging.calculate_total import calculate_total
@@ -31,6 +33,18 @@ def test_decimal_rate_and_free_item():
     assert calculate_total([{"qty": 2, "rate": 99.5}, {"qty": 1, "rate": 0}]) == 199.0
 
 
+def test_decimal_rates_are_accepted_and_stay_exact():
+    items = [{"qty": 2, "rate": Decimal("100.10")}, {"qty": 3, "rate": Decimal("50")}]
+    total = calculate_total(items)
+    assert total == Decimal("350.20")
+    assert isinstance(total, Decimal)
+
+
+def test_mixing_float_and_decimal_rates_raises():
+    with pytest.raises(ValueError, match="Item 1: rates can't mix float and Decimal"):
+        calculate_total([{"qty": 1, "rate": 10.5}, {"qty": 1, "rate": Decimal("2")}])
+
+
 @pytest.mark.parametrize("item, message", [
     ({"rate": 100}, "Item 0 is missing 'qty'."),
     ({"qty": 2}, "Item 0 is missing 'rate'."),
@@ -52,7 +66,11 @@ def test_invalid_qty_raises(qty):
         calculate_total([{"qty": qty, "rate": 10}])
 
 
-@pytest.mark.parametrize("rate", [-10, "100", True, None])
+@pytest.mark.parametrize("rate", [
+    -10, "100", True, None, Decimal("-1"),
+    float("nan"), float("inf"), float("-inf"),
+    Decimal("NaN"), Decimal("sNaN"), Decimal("Infinity"),
+])
 def test_invalid_rate_raises(rate):
     with pytest.raises(ValueError, match="rate must be a number, zero or more"):
         calculate_total([{"qty": 1, "rate": rate}])
