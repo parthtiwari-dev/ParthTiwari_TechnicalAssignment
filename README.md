@@ -21,8 +21,8 @@ Other docs: [`docs/architecture.md`](docs/architecture.md) (full design) ·
 | Area | What it does |
 |---|---|
 | Login and roles | Login and logout. **Admin** manages everything. A **Sales User** sees active customers and products and manages only their own orders. All of this is enforced on the server. |
-| Customers and products | Create, view, edit, search, filter, paginate. A record used by an order (or, for products, by a stock movement) can't be deleted, only deactivated. Product codes are unique. Prices and stock can't be negative. |
-| Sales orders | Choose an active customer, add several active products, set a 0–20% discount. The rate is copied from the product's price and stored, so later price changes don't touch old orders. Drafts can be edited; confirmed and cancelled orders are read-only. |
+| Customers and products | Create, view, edit, search, filter, paginate. A record used by an order (or, for products, by a stock movement) can't be deleted, only deactivated. Product codes are unique, ignoring case. Prices and stock can't be negative. |
+| Sales orders | Choose an active customer, add several active products, set a 0–20% discount. The rate is copied from the product's price and stored, so later price changes don't touch old orders. Drafts can be edited; confirmed and cancelled orders are read-only. A draft whose customer or product was deactivated since can't be confirmed until it is edited. |
 | Stock | Confirm deducts stock, cancelling a confirmed order puts it back, and each change writes a stock movement. Admins can adjust stock up or down with a required reason. Stock can never go below zero, even when two users confirm at the same moment. |
 | Order form (JS) | Fetches the chosen product's price and stock, adds and removes rows without reloading, shows live totals, validates input, asks before confirming or cancelling, and disables the button while a request runs. |
 | REST API | `GET /api/products`, `GET /api/products/<id>`, `POST /api/orders`, `PUT /api/orders/<id>`, `GET /api/orders/<id>`, `POST /api/orders/<id>/confirm`, `POST /api/orders/<id>/cancel`. JSON errors with proper status codes. See [`docs/api.md`](docs/api.md). |
@@ -35,17 +35,18 @@ Other docs: [`docs/architecture.md`](docs/architecture.md) (full design) ·
 
 | Area | Choice | Tested with |
 |---|---|---|
-| Language | Python | 3.13.5 (code written for 3.11+) |
+| Language | Python | 3.13.5 |
 | Web | Flask, Jinja templates, Flask-Login, Flask-WTF (CSRF) | Flask 3.1.3 |
 | Database | MySQL with SQLAlchemy and Flask-Migrate (Alembic) | MySQL 8.0.42 |
-| Frontend | HTML, CSS, vanilla JavaScript (`fetch`) | Chrome |
+| Frontend | HTML, CSS, vanilla JavaScript (`fetch`) | Checked in headless Chrome |
 | Tests | pytest, against a real MySQL test database | pytest 9.2.0 |
 
-Exact versions are pinned in [`requirements.txt`](requirements.txt).
+The direct dependencies are pinned to exact versions in [`requirements.txt`](requirements.txt).
 
 ## Setup
 
-You need Python 3.11+ and a running MySQL 8 server.
+You need Python and a running MySQL 8 server. It was tested on Python 3.13.5. Python 3.11 or
+newer is expected to work, but that is untested.
 
 **1. Get the code and install the dependencies**
 
@@ -91,7 +92,7 @@ flask run                   # http://127.0.0.1:5000
 run on a database that already has users.
 
 The schema is also exported to [`sql/schema.sql`](sql/schema.sql) for reading or a manual setup.
-The migrations are the source of truth.
+Its header says how to load it by hand. The migrations are the source of truth.
 
 ## Sample accounts
 
@@ -118,22 +119,24 @@ against wiping real data.
 pytest -q
 ```
 
-Result on the submitted code: **203 passed**.
+Result on the submitted code: **277 passed**.
 
 | File | What it proves |
 |---|---|
-| `test_pricing.py` | The PDF example (4500 / 450 / 4050), rounding, bad quantity and discount rejected |
-| `test_orders_service.py` | Confirm deducts stock; one short item changes nothing; repeated confirm doesn't deduct again; cancel restores once; stored rates; ownership |
+| `test_pricing.py` | The PDF example (4500 / 450 / 4050), rounding, bad quantity and discount rejected, totals too large for the database rejected |
+| `test_orders_service.py` | Confirm deducts stock; one short item changes nothing; repeated confirm doesn't deduct again; cancel restores once; a deactivated customer or product blocks confirm; stored rates; ownership |
 | `test_concurrency.py` | Two users confirming against the same limited stock: exactly one succeeds, stock never goes negative |
 | `test_api_products.py`, `test_api_orders.py` | Every endpoint and every error status (400, 401, 403, 404, 409, 422, 500 without a traceback) |
-| `test_web_master_data.py`, `test_web_orders.py`, `test_stock_adjust.py`, `test_auth.py` | Pages, permissions, safe delete, unique codes, stock adjustment, login |
+| `test_web_master_data.py`, `test_web_orders.py`, `test_stock_adjust.py`, `test_auth.py` | Pages, permissions, safe delete, unique codes, search, stock adjustment and its limits, login and the `?next=` redirect |
+| `test_query_params.py` | Huge, very long or non-ASCII numbers in the URL get a clear answer, never a 500 |
 | `test_reports.py`, `test_sql_queries.py` | Report figures (a multi-item order counts once), the five SQL queries |
-| `test_csv_import.py` | All-or-nothing import, row-numbered errors, duplicates in the file and in the database |
-| `test_debugging.py` | The corrected `calculate_total` |
+| `test_csv_import.py` | All-or-nothing import, row-numbered errors, duplicates in the file and in the database (including accented codes), upload size limits |
+| `test_debugging.py` | The corrected `calculate_total`, including `Decimal` rates and NaN or infinity rejected |
 
-Every scenario the assignment lists in Part 12 is covered. In `test_api_orders.py` each one is
-marked "Part 12" in its docstring. Most are also tested at the service level in
-`test_orders_service.py`.
+Every test scenario the assignment lists in Part 12 is covered, and each of those tests is
+marked "Part 12" in its docstring. The order scenarios are in `test_api_orders.py`, and most are
+also tested at the service level in `test_orders_service.py`. The CSV one (one bad row imports
+nothing) is in `test_csv_import.py`.
 
 ## Design
 
@@ -178,8 +181,10 @@ users ──< sales_orders >── customers
       confirm waits here, then sees "confirmed" and stops, so stock is never taken twice;
    2. locks the products sorted by id, so two users confirming at once queue up instead of both
       reading the same stock, and the fixed order prevents deadlocks;
-   3. checks every item. If any is short, nothing changes;
-   4. deducts, writes the movements and sets the status, then commits.
+   3. refuses, with nothing changed, if the customer or a product was deactivated after the
+      draft was saved;
+   4. checks every item. If any is short, nothing changes;
+   5. deducts, writes the movements and sets the status, then commits.
 
    Cancelling works the same way in reverse. The connection uses `READ COMMITTED`, so each query
    sees the latest committed data. `test_concurrency.py` proves it: with the lock removed, the
@@ -226,8 +231,20 @@ tests/
 - When a draft is edited, products already on it keep their stored rate. Newly added products
   take today's price.
 - The low stock report lists **active** products with stock strictly below the threshold.
-- CSV row numbers are line numbers in the file: the header is row 1. Product codes are compared
-  ignoring case, as MySQL does.
+- CSV row numbers are line numbers in the file: the header is row 1.
+- Product codes are compared ignoring case but not accents, everywhere: the form, the CSV import
+  and the unique index (`products.code` uses MySQL's `utf8mb4_0900_as_ci`). So `PRD-1` and
+  `prd-1` are the same code, while `CAFE-1` and `CAFÉ-1` are two different codes.
+- A draft can be saved only with an active customer and active products. If one of them is
+  deactivated later, confirming the draft is refused (409) until it is edited. Cancelling it
+  still works.
+- Limits, so a number can't overflow a database column: at most 1,000,000 of a product on one
+  order line or as opening stock, and a stock adjustment can't raise stock above 1,000,000.
+  Order amounts and totals go up to 9,999,999,999.99, the most `DECIMAL(12,2)` holds. In the
+  customer, product and order lists (and the API), a page number above 100,000 is treated as
+  100,000.
+- A CSV upload can be at most 1 MB and 5,000 products. Any request over 2 MB is refused before
+  it is read: the import page shows a message, and the API answers `413` in JSON.
 - A product created with opening stock (by form or CSV) has a stock movement, so by the
   assignment's rule it can be deactivated but not deleted.
 - Users are created by the seed script. There is no user management screen, since the
@@ -238,6 +255,9 @@ tests/
 - No user management UI and no password reset.
 - The app runs locally. It is not deployed.
 - Tested on Python 3.13.5 and MySQL 8.0.42 only.
+- The tests build their tables with SQLAlchemy's `create_all()` from the models, not by running
+  the migrations. The models and migrations are kept in step by hand.
+- The order date is the app server's local date (`date.today()`), not the user's time zone.
 - The JS order form is a convenience layer. All rules are enforced again on the server, so the
   app stays correct if the JS is bypassed, but the pages themselves need JS to create or edit
   orders.
