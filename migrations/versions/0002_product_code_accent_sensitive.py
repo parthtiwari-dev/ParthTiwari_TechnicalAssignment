@@ -7,7 +7,7 @@ code stays; MySQL rebuilds it with the new collation.
 
 Revision ID: 7d2e9a41c0b3
 Revises: 4c4b47024019
-Create Date: 2026-11-08 10:00:00
+Create Date: 2026-11-07 19:10:00
 
 """
 from alembic import op
