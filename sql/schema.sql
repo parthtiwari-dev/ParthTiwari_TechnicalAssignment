@@ -1,9 +1,20 @@
--- Schema for the sales_inventory database (MySQL 8).
--- Exported from the database built by the Alembic migrations (flask db upgrade).
--- The migrations are the source of truth; this file is for reading or a manual setup.
+-- Schema for the sales_inventory database (MySQL 8): the six tables, no data.
+-- Exported with mysqldump --no-data from a database built by the Alembic migrations
+-- (flask db upgrade). The migrations are the source of truth. This file is for reading, or
+-- for a manual setup instead of flask db upgrade:
+--
+--   1. Create an empty database:   CREATE DATABASE sales_inventory CHARACTER SET utf8mb4;
+--   2. Load this file:             mysql -u app_user -p sales_inventory < sql/schema.sql
+--   3. Tell Alembic the tables already exist, so a later flask db upgrade doesn't try to
+--      create them again:          flask db stamp head
+--   4. Add the sample data:        python scripts/seed.py
+--
+-- Foreign key checks are off while the tables are created, because the tables are in
+-- alphabetical order and some point to a table created after them. They are back on at the end.
 
-/*!50503 SET character_set_client = utf8mb4 */;
-/*!50503 SET character_set_client = utf8mb4 */;
+SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS = 0;
+
 CREATE TABLE `customers` (
   `id` int NOT NULL AUTO_INCREMENT,
   `name` varchar(100) NOT NULL,
@@ -17,10 +28,10 @@ CREATE TABLE `customers` (
   KEY `ix_customers_mobile` (`mobile`),
   KEY `ix_customers_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-/*!50503 SET character_set_client = utf8mb4 */;
+
 CREATE TABLE `products` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `code` varchar(50) NOT NULL,
+  `code` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_ci NOT NULL,
   `name` varchar(150) NOT NULL,
   `category` varchar(100) NOT NULL,
   `price` decimal(12,2) NOT NULL,
@@ -34,7 +45,7 @@ CREATE TABLE `products` (
   CONSTRAINT `ck_products_price_not_negative` CHECK ((`price` >= 0)),
   CONSTRAINT `ck_products_stock_not_negative` CHECK ((`stock_quantity` >= 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-/*!50503 SET character_set_client = utf8mb4 */;
+
 CREATE TABLE `sales_order_items` (
   `id` int NOT NULL AUTO_INCREMENT,
   `order_id` int NOT NULL,
@@ -50,7 +61,7 @@ CREATE TABLE `sales_order_items` (
   CONSTRAINT `ck_sales_order_items_quantity_positive` CHECK ((`quantity` > 0)),
   CONSTRAINT `ck_sales_order_items_rate_not_negative` CHECK ((`rate` >= 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-/*!50503 SET character_set_client = utf8mb4 */;
+
 CREATE TABLE `sales_orders` (
   `id` int NOT NULL AUTO_INCREMENT,
   `order_number` varchar(20) DEFAULT NULL,
@@ -73,7 +84,7 @@ CREATE TABLE `sales_orders` (
   CONSTRAINT `ck_sales_orders_discount_range` CHECK (((`discount_percent` >= 0) and (`discount_percent` <= 20))),
   CONSTRAINT `ck_sales_orders_status_valid` CHECK ((`status` in (_utf8mb4'draft',_utf8mb4'confirmed',_utf8mb4'cancelled')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-/*!50503 SET character_set_client = utf8mb4 */;
+
 CREATE TABLE `stock_movements` (
   `id` int NOT NULL AUTO_INCREMENT,
   `product_id` int NOT NULL,
@@ -93,7 +104,7 @@ CREATE TABLE `stock_movements` (
   CONSTRAINT `ck_stock_movements_change_not_zero` CHECK ((`quantity_change` <> 0)),
   CONSTRAINT `ck_stock_movements_movement_type_valid` CHECK ((`movement_type` in (_utf8mb4'opening',_utf8mb4'adjustment',_utf8mb4'sale',_utf8mb4'cancellation')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-/*!50503 SET character_set_client = utf8mb4 */;
+
 CREATE TABLE `users` (
   `id` int NOT NULL AUTO_INCREMENT,
   `name` varchar(100) NOT NULL,
@@ -105,3 +116,5 @@ CREATE TABLE `users` (
   UNIQUE KEY `uq_users_email` (`email`),
   CONSTRAINT `ck_users_role_valid` CHECK ((`role` in (_utf8mb4'admin',_utf8mb4'sales')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+SET FOREIGN_KEY_CHECKS = 1;
