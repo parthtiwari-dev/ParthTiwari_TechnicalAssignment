@@ -43,6 +43,7 @@ Every error has the same shape: `{"error": "<message>", "details": {...}}`.
 | 403 | a sales user opening another user's order | `{}` |
 | 404 | the order or product doesn't exist (or the product is inactive) | `{}` |
 | 409 | order isn't in the right status, not enough stock, or its customer or a product was deactivated after the draft was saved | `status`, `shortages`, or `customer_id` / `inactive_products` |
+| 413 | the request body is over 2 MB | `{}` |
 | 422 | invalid input | one message per field |
 | 500 | an unexpected error | `{}`, and never a traceback |
 
@@ -165,6 +166,11 @@ POST /api/orders
 
 Other `details` keys you can get: `customer_id`, `items` (`"Add at least one item."`) and
 `items[0].product_id`.
+
+Numbers too big for the database are refused the same way. A quantity above 1,000,000 gives
+`"items[0].quantity": "Can't be more than 1000000."`. A line amount over 9,999,999,999.99 (the most
+`DECIMAL(12,2)` holds) gives `"items[0].quantity": "Amount too large (at most 9,999,999,999.99)."`,
+and an order total over it gives `"items": "Order total too large (at most 9,999,999,999.99)."`.
 
 ### `GET /api/orders/<id>`
 

@@ -29,9 +29,11 @@ app/
   errors.py            error types and the handlers that turn them into responses
   serializers.py       models -> dicts for JSON (order_to_dict, product_to_dict)
   services/
-    pricing.py         money rounding and order totals (the only place totals are computed)
+    pricing.py         money rounding, order totals (the only place totals are computed), input parsers
     orders.py          create/edit Draft, confirm, cancel
     stock.py           stock adjustment and movement records
+    catalog.py         customers and products: search, create, edit, delete, activate
+    order_search.py    the order list
     csv_import.py      validate then import, all or nothing
     reports.py         report queries
   web/                 page routes (auth, customers, products, orders, stock, reports)
@@ -52,7 +54,7 @@ tests/
 |---|---|---|
 | `users` | id, name, email, password_hash, role | email unique; role is `admin` or `sales` |
 | `customers` | id, name, email, mobile, city, is_active | index on name, email, mobile |
-| `products` | id, code, name, category, price, stock_quantity, is_active | code unique; price ≥ 0; stock ≥ 0 (CHECK constraints) |
+| `products` | id, code, name, category, price, stock_quantity, is_active | code unique, ignoring case but not accents (collation `utf8mb4_0900_as_ci`); price ≥ 0; stock ≥ 0 (CHECK constraints) |
 | `sales_orders` | id, order_number, customer_id, order_date, status, discount_percent, subtotal, discount_amount, grand_total, created_by | order_number unique; status `draft`/`confirmed`/`cancelled`; discount 0–20; index on (status, order_date) and created_by |
 | `sales_order_items` | id, order_id, product_id, quantity, rate, amount | unique (order_id, product_id), so no duplicate product per order; quantity > 0 |
 | `stock_movements` | id, product_id, movement_type, quantity_change, order_id, reason, created_by, created_at | type is `opening`, `adjustment`, `sale`, `cancellation`; index on (product_id, created_at) |
@@ -60,7 +62,16 @@ tests/
 Money columns are `DECIMAL(12,2)`, and `discount_percent` is `DECIMAL(5,2)`. Foreign keys from
 orders and items to customers and products use `ON DELETE RESTRICT`. The database itself refuses
 to delete a customer or product that an order uses. The app checks first so it can show a clear
-message, and offers deactivation instead.
+message, and offers deactivation instead. If an order is saved between that check and the delete,
+the foreign key refuses the delete and the app gives the same message.
+
+Text columns use MySQL 8's default collation, `utf8mb4_0900_ai_ci` (case and accents ignored),
+except `products.code`, which uses `utf8mb4_0900_as_ci`: case is ignored but accents count. So
+`PRD-1` = `prd-1`, but `CAFE-1` and `CAFÉ-1` are different codes. The product form and the unique
+index compare codes this way. The CSV import asks MySQL which of the file's codes already exist,
+and checks repeats inside the file with Python's `lower()`, which agrees with the collation for
+normal codes. In the rare case they disagree (to MySQL a fullwidth `Ａ` is the letter `A`), the
+unique index refuses the save and nothing is imported.
 
 `rate` is copied from the product's price when the item is added, so later price changes don't
 alter existing orders. Editing a Draft keeps the stored rate for products already on it; only a
@@ -74,6 +85,25 @@ newly added product takes today's price.
   `discount = round(subtotal × percent / 100)`, `grand_total = subtotal − discount`.
 - The browser shows live totals for convenience. The server ignores any totals or rates it sends
   and works them out again.
+- Reports sum money in MySQL (`SUM` of a `DECIMAL(12,2)` column), then round it with the same
+  rule, and pages print the `Decimal` as it is. The server never uses a float for money.
+
+## Limits
+
+These limits keep every number inside its database column, so odd input gets a clear answer,
+never a 500.
+
+- `MAX_QUANTITY` (1,000,000, in `pricing.py`): the most of one product on an order line, as
+  opening stock, or as the result of a stock adjustment. A cancelled order always gets its stock
+  back, even if that takes stock above it; `change_stock` only refuses what a MySQL `INT` can't hold.
+- `MAX_MONEY` (9,999,999,999.99, the most `DECIMAL(12,2)` holds): prices, and every line amount and
+  subtotal in `calculate_totals`. A line too large is reported on `items[0].quantity`, a subtotal
+  too large on `items`.
+- `parse_int` accepts at most 18 characters of the ASCII digits 0–9 (with an optional minus).
+- Lists clamp `page` to 1–100,000 and `per_page` to 1–100. The movement report moves an
+  out-of-range page to the nearest real page.
+- Request bodies are at most 2 MB (`MAX_CONTENT_LENGTH`): pages show a message, the API answers
+  413 JSON. The CSV import itself allows 1 MB and 5,000 rows.
 
 ## Order lifecycle and stock
 
@@ -118,13 +148,18 @@ it: exactly one confirm succeeds. With the lock removed, both succeed and stock 
 - `get_order_for_user(order_id, user)` is the only way routes load an order. Admins get any order.
   Sales users get only their own. Anyone else gets 403. Pages and API both use it.
 - Sales users only see active customers and products.
+- Login: the same message for a wrong email or password, and an unknown email still checks a
+  dummy password hash, so timing doesn't reveal which emails exist. `?next=` is followed only if
+  it is a path on this site (no scheme, no host, no backslash, no control characters).
+- The session cookie is `HttpOnly` and `SameSite=Lax`. The app refuses to start without a
+  `SECRET_KEY`.
 
 ## API errors
 
 The API always returns JSON: `{"error": "<message>", "details": {...}}`, with status codes
 400/422 (bad input), 401 (not logged in), 403 (not allowed), 404 (missing), 409 (conflict, e.g.
-not enough stock or the order isn't a draft). Unexpected errors return 500 with a generic
-message. Tracebacks are only logged, never sent.
+not enough stock or the order isn't a draft), 413 (request over 2 MB). Unexpected errors return
+500 with a generic message. Tracebacks are only logged, never sent.
 
 ## Service functions and API contract
 
@@ -150,13 +185,14 @@ back on any error. Routes never commit. Errors come from `app/errors.py`:
 - Ownership: all four use `get_order_for_user`, so a sales user on someone else's order gets ForbiddenError.
 
 `services/stock.py`
-- `adjust_stock(product_id, quantity_change, reason, user) -> Product` (admin; non-zero whole number; reason required; never below zero)
+- `adjust_stock(product_id, quantity_change, reason, user) -> Product` (admin; non-zero whole number; reason required; never below zero; an increase can't take stock above `MAX_QUANTITY`)
 - `change_stock(product, quantity_change, movement_type, user, reason, order=None)` changes `stock_quantity` and adds the movement row. It doesn't commit. It is the only code that changes stock. For opening stock: create the product with `stock_quantity=0`, then call `change_stock(product, qty, "opening", user, "Opening stock")` if qty > 0.
 - `lock_products(product_ids) -> {id: Product}` (SELECT ... FOR UPDATE, in id order)
 
 `services/pricing.py`
 - `round_money(value)`, `calculate_totals(lines, discount_percent)` with `lines = [(quantity, rate), ...]` -> `{"amounts", "subtotal", "discount_amount", "grand_total"}`
-- Input parsers, each returns a clean value or raises ValidationError: `parse_int`, `parse_quantity` (1 or more), `parse_stock_quantity` (0 or more), `parse_price` (0 or more, 2 dp), `parse_discount` (0 to 20, 2 dp, blank = 0)
+- `calculate_totals` raises ValidationError if a line amount or the subtotal is over `MAX_MONEY`
+- Input parsers, each returns a clean value or raises ValidationError: `parse_int` (ASCII digits, at most 18 characters), `parse_quantity` (1 to `MAX_QUANTITY`), `parse_stock_quantity` (0 to `MAX_QUANTITY`), `parse_price` (0 or more, 2 dp), `parse_discount` (0 to 20, 2 dp, blank = 0)
 
 `permissions.py`
 - `get_order_for_user(order_id, user, lock=False)` -> order, or NotFoundError / ForbiddenError ("You do not have access to this order.")
@@ -172,13 +208,14 @@ Login is required for every route by `require_login` in `app/__init__.py`; only 
   through the normal login page). POST and PUT need the header `X-CSRFToken`, read from
   `<meta name="csrf-token">` in `base.html`.
 - Errors: `{"error": "<message>", "details": {...}}` with 400 malformed JSON, 401 not logged in,
-  403 not allowed, 404 missing, 409 conflict, 422 validation (`details` maps field -> message).
+  403 not allowed, 404 missing, 409 conflict, 413 too large, 422 validation (`details` maps
+  field -> message).
   Unexpected errors: 500 with a generic message, no traceback.
 - Read request bodies with `app.api.json_body()` (400 if the body isn't a JSON object).
 
 | Method | Path | Body | Success |
 |---|---|---|---|
-| GET | `/api/products?q=&category=&page=1&per_page=20` | | 200 `{"items": [product], "page", "per_page", "total"}`, active products only |
+| GET | `/api/products?q=&category=&page=1&per_page=20` | | 200 `{"items": [product], "page", "per_page", "total"}`, active products only; `page` and `per_page` are clamped as in Limits |
 | GET | `/api/products/<id>` | | 200 product (active only, else 404) |
 | POST | `/api/orders` | order body | 201 order |
 | PUT | `/api/orders/<id>` | order body | 200 order (draft only) |
