@@ -25,7 +25,7 @@ def confirmed_order(sales_user, make_order):
 
 
 def summary_by_name(rows):
-    return {row.name: (row.order_count, row.total_sales) for row in rows}
+    return {row["name"]: (row["order_count"], row["total_sales"]) for row in rows}
 
 
 # ---------- customer sales summary ----------
@@ -97,7 +97,7 @@ def test_product_sales_are_gross_before_order_discount(make_customer, make_produ
     confirmed_order(customer, [(keyboard, 1)], date(2026, 10, 5), "20")
     make_order(sales_user, customer, [(mouse, 9)])  # draft: left out
 
-    rows = {row.code: (row.quantity_sold, row.gross_value) for row in reports.product_sales_summary()}
+    rows = {row["code"]: (row["quantity_sold"], row["gross_value"]) for row in reports.product_sales_summary()}
 
     assert rows == {
         "RPT-KEY": (3, Decimal("4500.00")),  # 2 x 1500 + 1 x 1500, no discount taken off
@@ -113,7 +113,7 @@ def test_product_sales_date_range(make_customer, make_product, confirmed_order):
 
     rows = reports.product_sales_summary(date(2026, 10, 1), None)
 
-    assert [(row.code, row.quantity_sold) for row in rows] == [("RPT-RNG", 4)]
+    assert [(row["code"], row["quantity_sold"]) for row in rows] == [("RPT-RNG", 4)]
 
 
 # ---------- date and threshold checks ----------
@@ -219,6 +219,26 @@ def test_report_pages_render_for_admin(client, login, admin_user, make_customer,
     assert "PG-001" in products
     assert "PG-001" in low  # 3 - 1 sold = 2 left, below 5
     assert "Opening stock" in history and "Sale" in history
+
+
+def test_report_money_is_a_decimal_with_two_places(client, login, admin_user, make_customer,
+                                                  make_product, confirmed_order):
+    # Decimal("4140") == Decimal("4140.00"), so compare the text the page will print.
+    make_customer(name="Zero Sales Co")
+    product = make_product(code="PG-MONEY", price="1380.00", stock=10)
+    confirmed_order(make_customer(name="Money Buyer"), [(product, 3)], date(2026, 10, 1), "0")
+
+    customer_rows = {row["name"]: str(row["total_sales"]) for row in reports.customer_sales_summary()}
+    product_rows = {row["code"]: str(row["gross_value"]) for row in reports.product_sales_summary()}
+    assert customer_rows == {"Money Buyer": "4140.00", "Zero Sales Co": "0.00"}
+    assert product_rows == {"PG-MONEY": "4140.00"}
+
+    login(client, admin_user)
+    customers = client.get("/reports/customer-sales").get_data(as_text=True)
+    products = client.get("/reports/product-sales").get_data(as_text=True)
+    assert '<td class="number">4140.00</td>' in customers
+    assert '<td class="number">0.00</td>' in customers
+    assert '<td class="number">4140.00</td>' in products
 
 
 def test_report_pages_show_input_errors(client, login, admin_user):

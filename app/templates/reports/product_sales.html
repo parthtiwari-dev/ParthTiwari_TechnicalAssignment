@@ -22,7 +22,7 @@
       <td>{{ row.code }}</td>
       <td>{{ row.name }}</td>
       <td class="number">{{ row.quantity_sold }}</td>
-      <td class="number">{{ "%.2f"|format(row.gross_value) }}</td>
+      <td class="number">{{ row.gross_value }}</td>
     </tr>
     {% else %}
     <tr><td colspan="4" class="muted">No confirmed sales in this range.</td></tr>

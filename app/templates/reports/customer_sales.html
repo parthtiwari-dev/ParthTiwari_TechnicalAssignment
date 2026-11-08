@@ -19,7 +19,7 @@
     <tr>
       <td>{{ row.name }}{% if not row.is_active %} <span class="muted">(inactive)</span>{% endif %}</td>
       <td class="number">{{ row.order_count }}</td>
-      <td class="number">{{ "%.2f"|format(row.total_sales) }}</td>
+      <td class="number">{{ row.total_sales }}</td>
     </tr>
     {% else %}
     <tr><td colspan="3" class="muted">No customers yet.</td></tr>

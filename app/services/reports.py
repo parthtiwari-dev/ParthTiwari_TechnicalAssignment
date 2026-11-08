@@ -18,7 +18,7 @@ from app.models import (
     SalesOrderItem,
     StockMovement,
 )
-from app.services.pricing import parse_int
+from app.services.pricing import parse_int, round_money
 
 MOVEMENTS_PER_PAGE = 50
 
@@ -53,6 +53,20 @@ def parse_threshold(value):
     return threshold
 
 
+def _with_money_rounded(rows, money_column):
+    """Each result row as a dict, with the summed money column rounded to 2 places.
+
+    MySQL's SUM of a DECIMAL(12,2) column already has 2 decimal places. round_money() makes
+    sure, so the page can print the Decimal as it is ("4140.00"), with no float in between.
+    """
+    result = []
+    for row in rows:
+        values = row._asdict()
+        values[money_column] = round_money(values[money_column])
+        result.append(values)
+    return result
+
+
 def _date_conditions(start, end):
     """Order-date conditions for a range. Both ends are included."""
     conditions = []
@@ -75,7 +89,7 @@ def customer_sales_summary(start=None, end=None):
     customers with no matching orders in the result, with 0 orders and 0.00 sales. In WHERE
     they would be dropped, because their order columns are NULL.
 
-    Returns rows with: id, name, is_active, order_count, total_sales.
+    Returns a list of dicts with: id, name, is_active, order_count, total_sales (a Decimal).
     """
     join_condition = and_(
         SalesOrder.customer_id == Customer.id,
@@ -96,7 +110,7 @@ def customer_sales_summary(start=None, end=None):
         .group_by(Customer.id, Customer.name, Customer.is_active)
         .order_by(total_sales.desc(), Customer.name)
     )
-    return db.session.execute(query).all()
+    return _with_money_rounded(db.session.execute(query).all(), "total_sales")
 
 
 def product_sales_summary(start=None, end=None):
@@ -106,7 +120,7 @@ def product_sales_summary(start=None, end=None):
     off, because it belongs to the whole order, not to one product.
     Only products with at least one confirmed sale in the range are listed.
 
-    Returns rows with: id, code, name, quantity_sold, gross_value.
+    Returns a list of dicts with: id, code, name, quantity_sold, gross_value (a Decimal).
     """
     join_condition = and_(
         SalesOrder.id == SalesOrderItem.order_id,
@@ -128,7 +142,7 @@ def product_sales_summary(start=None, end=None):
         .group_by(Product.id, Product.code, Product.name)
         .order_by(gross_value.desc(), Product.code)
     )
-    return db.session.execute(query).all()
+    return _with_money_rounded(db.session.execute(query).all(), "gross_value")
 
 
 def low_stock_products(threshold):
