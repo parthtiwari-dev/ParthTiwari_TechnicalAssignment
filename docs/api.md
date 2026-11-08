@@ -42,7 +42,7 @@ Every error has the same shape: `{"error": "<message>", "details": {...}}`.
 | 401 | not logged in | `{}` |
 | 403 | a sales user opening another user's order | `{}` |
 | 404 | the order or product doesn't exist (or the product is inactive) | `{}` |
-| 409 | order isn't in the right status, or not enough stock | `status`, or `shortages` |
+| 409 | order isn't in the right status, not enough stock, or its customer or a product was deactivated after the draft was saved | `status`, `shortages`, or `customer_id` / `inactive_products` |
 | 422 | invalid input | one message per field |
 | 500 | an unexpected error | `{}`, and never a traceback |
 
@@ -207,6 +207,19 @@ If any item is short, nothing changes (no stock, no status) → `409`:
   "error": "Not enough stock to confirm this order."
 }
 ```
+
+If the customer or a product on the order was deactivated after the draft was saved, nothing
+changes → `409`. Edit the draft to replace them, then confirm:
+
+```json
+{
+  "details": {"inactive_products": ["ACC-003"]},
+  "error": "Order SO-000007 can't be confirmed: these products are inactive: ACC-003. Edit the draft first."
+}
+```
+
+For an inactive customer, `details` has `"customer_id": "This customer is inactive."` and the
+message says `customer <name> is inactive`.
 
 Confirming again (or confirming a cancelled order) takes nothing → `409`:
 

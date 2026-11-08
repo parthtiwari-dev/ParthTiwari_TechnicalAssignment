@@ -92,9 +92,11 @@ newly added product takes today's price.
 2. `SELECT ... FOR UPDATE` on the products in the order, **sorted by id**. A second user confirming
    an order with the same products waits here until the first commits. Locking in the same order
    every time means two users can't each hold one lock and wait forever for the other's (a deadlock).
-3. Check every item's quantity against the locked stock. If any item is short, roll back with an
+3. If the customer or any of the order's products was deactivated after the draft was saved,
+   roll back with a 409 that names them. Nothing changes. The user edits the draft first.
+4. Check every item's quantity against the locked stock. If any item is short, roll back with an
    error that lists the short items. Nothing changes.
-4. Lower each product's stock, insert one `sale` movement per item, set status to `confirmed`, commit.
+5. Lower each product's stock, insert one `sale` movement per item, set status to `confirmed`, commit.
 
 **Cancel** works the same way. It locks the order, then:
 - if the order is `draft`, it just sets `cancelled`;
@@ -141,7 +143,7 @@ back on any error. Routes never commit. Errors come from `app/errors.py`:
 `services/orders.py`
 - `create_draft_order(user, customer_id, items, discount_percent) -> SalesOrder`
 - `update_draft_order(order_id, user, customer_id, items, discount_percent) -> SalesOrder` (draft only, else ConflictError)
-- `confirm_order(order_id, user) -> SalesOrder` (not draft -> ConflictError; short stock -> ConflictError with `details.shortages = [{product_id, code, requested, available}]`)
+- `confirm_order(order_id, user) -> SalesOrder` (not draft -> ConflictError; customer or product deactivated since the draft was saved -> ConflictError with `details.customer_id` and/or `details.inactive_products = [code, ...]`; short stock -> ConflictError with `details.shortages = [{product_id, code, requested, available}]`)
 - `cancel_order(order_id, user) -> SalesOrder` (already cancelled -> ConflictError)
 - `items` is a list of `{"product_id": ..., "quantity": ...}`. Anything else in an item (a rate, an amount) is ignored.
 - Validation `details` keys: `customer_id`, `discount_percent`, `items`, `items[0].product_id`, `items[0].quantity` (0 = the row's position in the list).

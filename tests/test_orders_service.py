@@ -15,6 +15,7 @@ from app.models import (
     SalesOrder,
     StockMovement,
 )
+from app.services.catalog import set_customer_active, set_product_active
 from app.services.orders import (
     cancel_order,
     confirm_order,
@@ -90,6 +91,48 @@ def test_confirm_with_one_short_item_changes_nothing(sales_user, customer, make_
     assert plenty.stock_quantity == 10
     assert short.stock_quantity == 1
     assert movements(plenty, MOVEMENT_SALE) == []
+
+
+def test_confirm_refuses_a_product_deactivated_after_the_draft(
+    sales_user, customer, make_product, make_order
+):
+    active = make_product(stock=10)
+    retired = make_product(code="OLD-1", stock=10)
+    order = make_order(sales_user, customer, [(active, 1), (retired, 1)])
+    set_product_active(retired.id, False)
+
+    with pytest.raises(ConflictError) as error:
+        confirm_order(order.id, sales_user)
+
+    assert "these products are inactive: OLD-1" in error.value.message
+    assert error.value.details == {"inactive_products": ["OLD-1"]}
+    assert order.status == STATUS_DRAFT
+    assert active.stock_quantity == 10
+    assert retired.stock_quantity == 10
+
+
+def test_confirm_refuses_a_customer_deactivated_after_the_draft(
+    sales_user, customer, make_product, make_order
+):
+    product = make_product(stock=10)
+    order = make_order(sales_user, customer, [(product, 1)])
+    set_customer_active(customer.id, False)
+
+    with pytest.raises(ConflictError) as error:
+        confirm_order(order.id, sales_user)
+
+    assert f"customer {customer.name} is inactive" in error.value.message
+    assert order.status == STATUS_DRAFT
+    assert product.stock_quantity == 10
+
+
+def test_cancel_still_works_after_deactivation(sales_user, customer, make_product, make_order):
+    product = make_product(stock=10)
+    order = make_order(sales_user, customer, [(product, 1)])
+    set_product_active(product.id, False)
+    set_customer_active(customer.id, False)
+
+    assert cancel_order(order.id, sales_user).status == STATUS_CANCELLED
 
 
 def test_repeated_confirm_does_not_deduct_again(sales_user, customer, make_product, make_order):

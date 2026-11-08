@@ -186,8 +186,10 @@ def confirm_order(order_id, user):
        waits here, then sees "confirmed" and stops, so stock is never taken twice.
     2. Lock the order's products in id order. A second user confirming an order for the same
        products waits here until we finish.
-    3. If any item is short, stop with a list of shortages. Nothing has changed yet.
-    4. Take the stock, write one 'sale' movement per item, mark confirmed, commit.
+    3. If the customer or any product was deactivated after the draft was saved, stop. The
+       user edits the draft first. Nothing has changed yet.
+    4. If any item is short, stop with a list of shortages. Nothing has changed yet.
+    5. Take the stock, write one 'sale' movement per item, mark confirmed, commit.
     """
     try:
         order = get_order_for_user(order_id, user, lock=True)
@@ -197,6 +199,25 @@ def confirm_order(order_id, user):
             )
 
         products = lock_products([item.product_id for item in order.items])
+
+        problems, details = [], {}
+        if not order.customer.is_active:
+            problems.append(f"customer {order.customer.name} is inactive")
+            details["customer_id"] = "This customer is inactive."
+        inactive_codes = [
+            products[item.product_id].code
+            for item in order.items
+            if not products[item.product_id].is_active
+        ]
+        if inactive_codes:
+            problems.append("these products are inactive: " + ", ".join(inactive_codes))
+            details["inactive_products"] = inactive_codes
+        if problems:
+            raise ConflictError(
+                f"Order {order.order_number} can't be confirmed: {'; '.join(problems)}. "
+                "Edit the draft first.",
+                details,
+            )
 
         shortages = []
         for item in order.items:

@@ -369,6 +369,27 @@ def test_confirm_with_one_short_item_changes_nothing(
     assert client.get(f"/api/orders/{order.id}").get_json()["status"] == "draft"
 
 
+def test_confirm_with_a_deactivated_product_gives_409(
+    client, login, sales_user, customer, make_product, make_order
+):
+    product = make_product(code="OLD-2", stock=10)
+    order = make_order(sales_user, customer, [(product, 1)])
+    product.is_active = False
+    db.session.commit()
+    login(client, sales_user)
+
+    response = client.post(f"/api/orders/{order.id}/confirm")
+
+    assert response.status_code == 409
+    assert response.get_json() == {
+        "error": f"Order {order.order_number} can't be confirmed: these products are inactive: OLD-2. "
+                 "Edit the draft first.",
+        "details": {"inactive_products": ["OLD-2"]},
+    }
+    assert stock_of(product) == 10
+    assert client.get(f"/api/orders/{order.id}").get_json()["status"] == "draft"
+
+
 def test_repeated_confirm_does_not_deduct_again(client, login, sales_user, customer, make_product, make_order):
     """Part 12: confirming twice takes the stock only once."""
     product = make_product(stock=10)
