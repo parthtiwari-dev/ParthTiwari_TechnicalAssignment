@@ -227,6 +227,26 @@ def test_product_search_and_filters(client, login, admin_user, make_product):
     assert b"KB-1" in page.data and b"KB-OLD" in page.data
 
 
+def test_search_treats_percent_and_underscore_as_plain_characters(app, make_product, make_customer):
+    # In SQL LIKE, % means "anything" and _ means "any one character". Typed into the search
+    # box they must match only themselves.
+    make_product(code="PCT-1", name="50% off pack")
+    make_product(code="PCT-2", name="5000 pack")
+    make_product(code="A_1", name="Underscore")
+    make_product(code="AB1", name="No underscore")
+    make_customer(name="Ten_Percent Traders")
+    make_customer(name="TenXPercent Traders")
+
+    def product_codes(q):
+        return [product.code for product in catalog.search_products(q=q)[0]]
+
+    assert product_codes("50%") == ["PCT-1"]
+    assert product_codes("A_1") == ["A_1"]
+    assert product_codes("%") == ["PCT-1"]
+    customers, total, _, _ = catalog.search_customers(q="Ten_")
+    assert [customer.name for customer in customers] == ["Ten_Percent Traders"]
+
+
 def test_product_list_paginates(client, login, admin_user, make_product):
     for number in range(25):
         make_product(code=f"PG-{number:03d}", stock=0)

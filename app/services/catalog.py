@@ -62,9 +62,14 @@ def search_products(q=None, category=None, status="active", page=1, per_page=DEF
     Returns (products, total, page, per_page), ordered by code.
     """
     query = select(Product)
-    if q:
-        like = f"%{q.strip()}%"
-        query = query.where(or_(Product.code.like(like), Product.name.like(like)))
+    if q and q.strip():
+        text = q.strip()
+        # contains() builds LIKE '%text%'. autoescape=True escapes any % or _ the user typed,
+        # so they are matched as plain characters, not as LIKE wildcards.
+        query = query.where(or_(
+            Product.code.contains(text, autoescape=True),
+            Product.name.contains(text, autoescape=True),
+        ))
     if category:
         query = query.where(Product.category == category)
     if status == "active":
@@ -80,11 +85,14 @@ def search_customers(q=None, status="active", page=1, per_page=DEFAULT_PER_PAGE)
     Returns (customers, total, page, per_page), ordered by name.
     """
     query = select(Customer)
-    if q:
-        like = f"%{q.strip()}%"
-        query = query.where(
-            or_(Customer.name.like(like), Customer.email.like(like), Customer.mobile.like(like))
-        )
+    if q and q.strip():
+        text = q.strip()
+        # Same as search_products: % and _ in the search box are plain characters.
+        query = query.where(or_(
+            Customer.name.contains(text, autoescape=True),
+            Customer.email.contains(text, autoescape=True),
+            Customer.mobile.contains(text, autoescape=True),
+        ))
     if status == "active":
         query = query.where(Customer.is_active.is_(True))
     elif status == "inactive":
